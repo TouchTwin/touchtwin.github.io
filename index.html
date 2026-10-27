@@ -253,6 +253,7 @@ footer { border-top: 1px solid var(--line); margin-top: 48px; padding-block: 28p
 .chip b { font: 600 15px/1.25 var(--f-mono); color: var(--ink); }
 .chip.ok b { color: var(--real); }
 .tbl.narrow { max-width: 820px; }
+.sub > p.insight { font: 600 1.12rem/1.4 var(--f-display); color: var(--ink); }
 h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px; }
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 14px; }
 .gallery .fig-btn { display: grid; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
@@ -577,7 +578,7 @@ h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px
 
       <div class="sub">
         <h3>Contact prediction</h3>
-        <p>A contact predictor trained on vision-based simulations misses 32% of the real contact frames on held-out recordings; training on touch-grounded simulations reduces the miss rate to 13%.</p>
+        <p class="insight">Touch-grounding is essential for contact accuracy.</p>
         <div class="tbl narrow" role="region" aria-label="Contact prediction results" tabindex="0">
           <table>
             <thead>
@@ -594,7 +595,7 @@ h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px
 
       <div class="sub">
         <h3>Hand policy</h3>
-        <p>A hand policy (N0-VTLA) trained on the observed finger pose grips held-out objects with 0.31× the true force; the touch-grounded replays restore human-level grip (0.99×, 20/20).</p>
+        <p class="insight">Touch supplies information beyond surface-level hand positions.</p>
         <div class="arms" aria-label="Three policies that differ only in their finger labels">
           <div style="--c: #e89660"><b>Observed finger pose</b><small>the joint angles the hand reached</small></div>
           <div style="--c: var(--muted)"><b>Vision-based replays</b><small>physics replays of vision-tracked poses</small></div>

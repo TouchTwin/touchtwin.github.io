@@ -1,0 +1,1189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>[hidden]{display:none!important}img{max-width:100%}</style>
+<title>TouchTwin: Scaling Human Touch Data via Real-to-Sim-to-Real</title>
+<meta name="description" content="TouchTwin scales human touch data via Real-to-Sim-to-Real: tactile-glove recordings rebuilt in MuJoCo with a touch-driven hand, perturbed into new demonstrations, rendered as realistic video, and used to train a contact predictor and a hand policy.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #f3f4f1;
+  --panel: #ffffff;
+  --ink: #15181b;
+  --ink-2: #3a4046;
+  --muted: #646c73;
+  --line: #d6dad4;
+  --real: #2a7748;
+  --sim: #b4501a;
+  --real-soft: rgba(42, 119, 72, .10);
+  --sim-soft: rgba(180, 80, 26, .09);
+  --viewer: #e4e7e1;
+  --focus: #1f5fbf;
+  --studio: #fbfbfa;
+  --studio-edge: #e4e6e2;
+  --studio-ink: #6b7177;
+  --gen: #3d4a8f;
+  --f-display: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --frame: 1180px;
+  --read: 70ch;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #111416; --panel: #191c1f; --ink: #eceef0; --ink-2: #c8cdd2; --muted: #969ea6; --line: #2b3034;
+    --real: #5fbf86; --sim: #ee8a4c; --real-soft: rgba(95, 191, 134, .13); --sim-soft: rgba(238, 138, 76, .13);
+    --viewer: #20252a; --focus: #7fb0ff; color-scheme: dark;
+    --studio: #262b30; --studio-edge: #16191c; --studio-ink: #9aa2aa; --gen: #8f9cf0;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #111416; --panel: #191c1f; --ink: #eceef0; --ink-2: #c8cdd2; --muted: #969ea6; --line: #2b3034;
+  --real: #5fbf86; --sim: #ee8a4c; --real-soft: rgba(95, 191, 134, .13); --sim-soft: rgba(238, 138, 76, .13);
+  --viewer: #20252a; --focus: #7fb0ff; color-scheme: dark;
+  --studio: #262b30; --studio-edge: #16191c; --studio-ink: #9aa2aa; --gen: #8f9cf0;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 400 17px/1.6 var(--f-body); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.wrap { max-width: var(--frame); margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: var(--read); }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+p { margin: 0; }
+.mono, .num, td, .stat b { font-variant-numeric: tabular-nums; }
+.real { color: var(--real); }
+.sim { color: var(--sim); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--paper) 90%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; align-items: center; gap: 20px; min-height: 48px; }
+.brand { font: 600 15px/1 var(--f-display); white-space: nowrap; text-decoration: none; }
+.brand i { font-style: normal; color: var(--muted); }
+.steps-nav { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin-left: auto; min-width: 0; }
+.steps-nav::-webkit-scrollbar { display: none; }
+.steps-nav a { font: 500 13px/1 var(--f-mono); color: var(--muted); text-decoration: none; padding: 8px 9px; border-radius: 4px; white-space: nowrap; }
+.steps-nav a:hover, .steps-nav a.on { color: var(--ink); background: var(--sim-soft); }
+.steps-nav a span { color: var(--sim); margin-right: 5px; }
+
+.hero { padding-block: 56px 28px; display: grid; gap: 18px; }
+.eyebrow { font: 500 12.5px/1.4 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hero h1 { font-weight: 700; font-size: clamp(2.5rem, 6.4vw, 4.9rem); line-height: .98; letter-spacing: -0.025em; }
+.hero h1 .two { color: var(--muted); font-weight: 500; }
+.hero h1 .l1 { display: block; font-size: .56em; font-weight: 600; letter-spacing: -0.01em; margin-bottom: .12em; color: var(--ink-2); }
+.dek { font-size: clamp(1.1rem, 2vw, 1.3rem); line-height: 1.45; color: var(--ink-2); max-width: 54ch; }
+.byline { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: center; font-size: 15px; color: var(--muted); }
+.byline b { color: var(--ink); font-weight: 600; }
+.authors { display: grid; gap: 4px; }
+.authors .names { font-size: clamp(1rem, 1.6vw, 1.12rem); line-height: 1.5; color: var(--ink); }
+.authors sup { font-size: .68em; color: var(--muted); margin-left: 1px; }
+.authors .affil { font-size: 14.5px; line-height: 1.5; color: var(--muted); }
+.links { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.links a { font: 600 13.5px/1 var(--f-body); color: var(--paper); background: var(--ink); border-radius: 6px; padding: 9px 14px; text-decoration: none; }
+.links a:hover { background: var(--sim); }
+.bib { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; font: 400 13px/1.55 var(--f-mono); color: var(--ink-2); }
+.key { display: inline-flex; gap: 16px; flex-wrap: wrap; font: 500 12.5px/1 var(--f-mono); color: var(--ink-2); }
+.key span { display: inline-flex; align-items: center; gap: 7px; }
+.key span::before { content: ""; width: 11px; height: 11px; border-radius: 2px; background: var(--c); }
+
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figcaption, .cap { font-size: 14.5px; line-height: 1.5; color: var(--muted); }
+figcaption b, .cap b { color: var(--ink-2); font-weight: 600; }
+video { display: block; width: 100%; height: auto; background: #0d0f10; border-radius: 6px; }
+.vid { position: relative; }
+.vid video { aspect-ratio: var(--ar, 16 / 9); object-fit: contain; }
+.paper { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+.paper img { display: block; width: 100%; height: auto; cursor: zoom-in; }
+.fig-btn { all: unset; display: block; cursor: zoom-in; border-radius: 6px; }
+.fig-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+
+.abstract { padding-block: 36px 8px; display: grid; gap: 14px; }
+.label { font: 500 12.5px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.abstract p { font-size: 18px; line-height: 1.62; }
+.tri { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.tri .card { display: grid; gap: 8px; align-content: start; padding: 16px 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); min-width: 0; }
+.tri .tag { font: 600 11.5px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--sim); }
+.tri .card:first-child .tag { color: var(--muted); }
+.tri h3 { font-size: 1.12rem; line-height: 1.3; }
+.abstract .tri p, .tri li { font-size: 15.5px; line-height: 1.5; color: var(--ink-2); }
+.tri ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.tri ul ul { margin-top: 4px; list-style: circle; }
+.tri b { color: var(--ink); }
+@media (max-width: 860px) { .tri { grid-template-columns: minmax(0, 1fr); } }
+.gauge { gap: 8px; max-width: 820px; }
+.gauge .gh { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font: 500 11.5px/1.3 var(--f-mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.gauge .grow, .gauge .gaxis { display: grid; grid-template-columns: 210px minmax(0, 1fr) 54px 80px; gap: 12px; align-items: center; }
+.gauge .gl { font-size: 14.5px; color: var(--ink-2); }
+.gauge .grow.ours .gl { color: var(--sim); font-weight: 600; }
+.gauge .gt { position: relative; height: 14px; border-radius: 3px; background: color-mix(in srgb, var(--line) 55%, transparent); }
+.gauge .gt i { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v) / 2 * 100%); background: var(--c); border-radius: 3px; }
+.gauge .gt .g1 { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+.gauge .grow b { font: 600 15px/1 var(--f-mono); }
+.gauge .grow small { font-size: 13px; color: var(--muted); }
+.gauge .gtk { position: relative; height: 16px; font: 500 11.5px/1 var(--f-mono); color: var(--muted); }
+.gauge .gtk em { position: absolute; top: 2px; transform: translateX(-50%); font-style: normal; white-space: nowrap; }
+.gauge .gtk em:first-child { transform: none; } .gauge .gtk em:last-child { transform: translateX(-100%); }
+@media (max-width: 640px) { .gauge .grow, .gauge .gaxis { grid-template-columns: 1fr 46px; } .gauge .grow .gl { grid-column: 1 / -1; } .gauge .grow small, .gauge .gaxis > span:first-child { display: none; } .gauge .gaxis { grid-template-columns: 1fr 46px; } }
+.full summary { cursor: pointer; font: 500 13px/1.4 var(--f-mono); color: var(--muted); }
+.full[open] summary { margin-bottom: 10px; }
+.pipeline { list-style: none; margin: 36px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line); }
+.pipeline li { padding: 16px 16px 4px 0; display: grid; gap: 6px; align-content: start; position: relative; }
+.pipeline li + li { padding-left: 16px; border-left: 1px solid var(--line); }
+.pipeline a { text-decoration: none; display: grid; gap: 6px; }
+.pipeline .n { font: 600 13px/1 var(--f-mono); color: var(--sim); }
+.pipeline .t { font: 600 17px/1.25 var(--f-display); }
+.pipeline .d { font-size: 14.5px; line-height: 1.45; color: var(--muted); }
+.pipeline .flow { font: 500 11.5px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+@media (max-width: 980px) { .pipeline { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pipeline li, .pipeline li + li { padding: 14px 14px 10px 0; border-left: 0; border-bottom: 1px solid var(--line); } }
+@media (max-width: 520px) { .pipeline { grid-template-columns: minmax(0, 1fr); } }
+
+.step { border-top: 1px solid var(--line); padding-block: 64px 24px; display: grid; gap: 26px; scroll-margin-top: 56px; }
+.step-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 18px; align-items: baseline; }
+.step-head .num { font: 700 clamp(2.2rem, 4.5vw, 3.2rem)/1 var(--f-display); color: var(--sim); }
+.step-head h2 .two { color: var(--muted); font-weight: 500; }
+.step-head h2 { font-weight: 600; font-size: clamp(1.5rem, 3vw, 2.1rem); line-height: 1.12; letter-spacing: -0.01em; }
+.step-head .flow { grid-column: 2; font: 500 12px/1.4 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 18px; line-height: 1.6; color: var(--ink-2); max-width: var(--read); }
+h3 { font-weight: 600; font-size: 1.22rem; line-height: 1.25; }
+.sub { display: grid; gap: 14px; }
+.sub > p { max-width: var(--read); color: var(--ink-2); }
+.two-figs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .two-figs { grid-template-columns: minmax(0, 1fr); } }
+
+.seg { display: inline-flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.seg button { font: 500 13.5px/1.2 var(--f-body); color: var(--ink-2); background: transparent; border: 0; padding: 9px 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.seg button:hover:not([aria-pressed="true"]):not([aria-selected="true"]) { background: var(--sim-soft); }
+.ctrl-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.ctrl-row .lab { font: 500 12px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.btn { font: 600 13.5px/1 var(--f-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 9px 13px; cursor: pointer; }
+.btn:hover { border-color: var(--sim); }
+.btn.primary { background: var(--sim); color: #fff; border-color: var(--sim); }
+input[type="range"] { accent-color: var(--sim); width: 100%; }
+
+.viewer-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) { .viewer-grid { grid-template-columns: minmax(0, 1fr); } }
+.stage { position: relative; aspect-ratio: 4 / 3; max-width: 100%; background: var(--viewer); border-radius: 8px; overflow: hidden; }
+.stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.stage .msg { position: absolute; inset: 0; display: grid; place-items: center; font: 500 13px/1.4 var(--f-mono); color: var(--muted); text-align: center; padding: 20px; pointer-events: none; }
+.stage .hint { position: absolute; left: 12px; bottom: 10px; font: 500 11.5px/1 var(--f-mono); color: var(--muted); pointer-events: none; }
+#asset-stage, #hand-stage { background: radial-gradient(115% 95% at 50% 38%, var(--studio) 52%, var(--studio-edge)); }
+#asset-stage .msg, #asset-stage .hint, #hand-stage .msg, #hand-stage .hint { color: var(--studio-ink); }
+.side { display: grid; gap: 16px; min-width: 0; }
+.picker { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.picker button { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-rows: auto auto; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); text-align: center; font: 500 12.5px/1.25 var(--f-body); color: var(--ink-2); }
+.picker button img { width: 100%; aspect-ratio: 1; object-fit: contain; background: #fff; border-radius: 4px; }
+.picker button[aria-pressed="true"] { border-color: var(--sim); box-shadow: inset 0 0 0 1px var(--sim); color: var(--ink); }
+.picker button:hover { border-color: var(--sim); }
+.picker button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.info { display: grid; gap: 6px; }
+.info h3 { font-size: 1.15rem; }
+.facts { font: 400 13.5px/1.5 var(--f-mono); color: var(--muted); }
+.joints { display: grid; gap: 10px; }
+.joints:empty { display: none; }
+.jrow { display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 2px 10px; align-items: center; font-size: 14px; }
+.jrow span { color: var(--ink-2); }
+.jrow span em { font: 500 11px/1 var(--f-mono); font-style: normal; color: var(--sim); margin-left: 6px; text-transform: uppercase; letter-spacing: .05em; }
+.jrow input { grid-column: 1 / -1; }
+.jrow output { font: 500 12.5px/1 var(--f-mono); text-align: right; color: var(--ink-2); grid-row: 1; grid-column: 2; }
+.jbtns { display: flex; gap: 8px; }
+
+.replay { display: grid; gap: 18px; }
+.replay-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 26px; align-items: stretch; }
+.replay-grid > .sub { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.replay-grid #replay-stage { aspect-ratio: auto; flex: 1 1 auto; min-height: 300px; }
+.replay-grid #replay-stage canvas { position: absolute; inset: 0; }
+.replay-low { display: grid; gap: 14px; align-content: start; min-width: 0; }
+@media (max-width: 880px) { .replay-grid { grid-template-columns: minmax(0, 1fr); } .replay-grid #replay-stage { flex: none; aspect-ratio: 4 / 3; min-height: 0; } }
+.timeline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.timeline output { font: 500 12.5px/1 var(--f-mono); color: var(--ink-2); min-width: 9ch; text-align: right; }
+.clipinfo { display: grid; gap: 14px; }
+.clipinfo .what { font-size: 16.5px; line-height: 1.55; }
+.stats { display: grid; gap: 0; margin: 0; border-top: 1px solid var(--line); }
+.stats div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.stats dt { font: 500 11.5px/1.3 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stats dd { margin: 0; font-size: 15.5px; line-height: 1.45; }
+.stats dd b { font: 600 15px/1.3 var(--f-mono); }
+.open { font-size: 14px; line-height: 1.5; color: var(--muted); }
+.open b { color: var(--ink-2); font-weight: 600; }
+
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { padding: 9px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; white-space: normal; min-width: 15em; }
+thead th { font: 500 11.5px/1.3 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); vertical-align: bottom; }
+thead tr.grp th { border-bottom: 0; padding-bottom: 0; color: var(--ink-2); }
+td { font-family: var(--f-mono); font-size: 13.5px; }
+td:first-child { font-family: var(--f-body); font-size: 14.5px; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.ours td { background: var(--sim-soft); }
+tr.ours td:first-child { color: var(--sim); font-weight: 600; }
+td.best { font-weight: 600; color: var(--ink); }
+.tblnote { font-size: 13.5px; color: var(--muted); max-width: 92ch; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+dialog.lb { border: 0; padding: 0; max-width: min(96vw, 1800px); max-height: 94vh; background: #fff; border-radius: 8px; overflow: auto; }
+dialog.lb::backdrop { background: rgba(10, 12, 14, .78); }
+dialog.lb img { display: block; width: 100%; height: auto; min-width: min(1100px, 92vw); }
+dialog.lb button { position: sticky; top: 8px; float: right; margin: 8px; z-index: 2; }
+
+footer { border-top: 1px solid var(--line); margin-top: 48px; padding-block: 28px 44px; color: var(--muted); font-size: 14px; }
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  .hero { padding-block: 36px 20px; }
+  .step { padding-block: 48px 16px; }
+  .lede, .abstract p { font-size: 16.5px; }
+  .brand { display: none; }
+  .steps-nav { margin-left: 0; }
+}
+.demos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 20px; align-items: start; }
+.demos.four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 980px) { .demos.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .demos, .demos.four { grid-template-columns: minmax(0, 1fr); } }
+.demo figcaption { font-size: 14px; }
+.demos.one { grid-template-columns: minmax(0, 1fr); max-width: 760px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-grid; gap: 2px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); min-width: 0; }
+.chip small { font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.chip b { font: 600 15px/1.25 var(--f-mono); color: var(--ink); }
+.chip.ok b { color: var(--real); }
+.tbl.narrow { max-width: 820px; }
+h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 14px; }
+.gallery .fig-btn { display: grid; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.gallery .fig-btn img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; border-radius: 3px; }
+.gallery .fig-btn span { font: 500 13px/1.3 var(--f-body); color: #3a4046; padding: 0 2px 2px; }
+.gallery .fig-btn:hover { border-color: var(--sim); }
+.hp { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
+.hp li { display: grid; gap: 6px; align-content: start; position: relative; min-width: 0; }
+.hp .ph { position: relative; display: block; }
+.hp li:not(:last-child) .ph::after { content: "→"; position: absolute; right: -15px; top: 50%; transform: translateY(-50%); font: 600 14px/1 var(--f-mono); color: var(--sim); }
+.hp img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: radial-gradient(115% 95% at 50% 38%, var(--studio) 52%, var(--studio-edge)); border: 1px solid var(--line); border-radius: 6px; }
+.hp b { font: 600 15px/1.2 var(--f-display); }
+.hp b span { font: 600 12.5px/1 var(--f-mono); color: var(--sim); margin-right: 6px; }
+.hp small { font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+@media (max-width: 760px) { .hp { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hp .ph::after { display: none; } }
+.cbar { display: grid; gap: 4px; }
+.cbar i { display: block; height: 10px; border-radius: 3px; background: linear-gradient(90deg, #fcffa4, #fb9b06 25%, #ed6925 40%, #a52c60 62%, #4a0c6b 82%, #000004); }
+.cbar span { display: flex; justify-content: space-between; font: 500 11.5px/1 var(--f-mono); color: var(--muted); }
+.cbar em { font-style: normal; }
+.minor { font-size: 14px; color: var(--muted); }
+.taxspec { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.taxspec div { display: grid; gap: 2px; align-content: start; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); min-width: 0; }
+.taxspec b { font: 600 13.5px/1.2 var(--f-display); display: flex; align-items: center; gap: 6px; }
+.taxspec b::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.taxspec strong { font: 600 20px/1.15 var(--f-mono); }
+.taxspec small { font: 400 11.5px/1.35 var(--f-mono); color: var(--muted); }
+@media (max-width: 760px) { .taxspec { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.ogrid { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px 10px; }
+@media (max-width: 1000px) { .ogrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+#ogrid-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.otile { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.otile .ov { aspect-ratio: 1 / 1; max-width: 100%; border-radius: 6px; background-color: var(--studio); background-size: 70%; background-position: center; background-repeat: no-repeat; cursor: grab; }
+.otile figcaption { display: grid; gap: 1px; font-size: 13px; line-height: 1.3; }
+.otile figcaption b { font: 600 14.5px/1.25 var(--f-display); color: var(--sim); }
+.otile figcaption span { color: var(--muted); }
+@media (max-width: 760px) { .ogrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.handdemo { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.touchcol { position: relative; display: grid; gap: 8px; min-width: 0; cursor: grab; touch-action: pan-y; }
+#hand-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.tstage { position: relative; aspect-ratio: 2 / 1; max-width: 100%; border-radius: 8px; background: radial-gradient(115% 95% at 50% 38%, var(--studio) 52%, var(--studio-edge)); }
+.tlab { position: absolute; left: 10px; top: 8px; z-index: 2; font: 600 12px/1 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; }
+.tlab.real { color: #2a7748; } .tlab.sim { color: #b4501a; }
+.touchcol .msg { position: absolute; inset: 0; display: grid; place-items: center; font: 500 13px/1.4 var(--f-mono); color: var(--studio-ink); text-align: center; pointer-events: none; z-index: 2; }
+@media (max-width: 760px) { .handdemo { grid-template-columns: minmax(0, 1fr); } }
+.handread { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 320px); gap: 10px 20px; align-items: center; }
+@media (max-width: 760px) { .handread { grid-template-columns: minmax(0, 1fr); } }
+.padbars { display: grid; gap: 10px; }
+.padbars:empty { display: none; }
+.padbars .ph { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font: 500 11.5px/1.3 var(--f-mono); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.padbars .ph i { font-style: normal; display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; }
+.padbars .ph i::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: var(--c); }
+.padbars svg { display: block; width: 100%; height: auto; overflow: visible; }
+.pbrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px 18px; max-width: 460px; }
+.pbrow.two { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }
+.padbars svg .tr { fill: var(--line); opacity: .45; }
+.padbars svg .hd { font-weight: 600; fill: var(--ink-2); }
+.padbars svg text { font: 500 10.5px var(--f-mono); fill: var(--muted); }
+.padbars svg .ax { stroke: var(--line); stroke-width: 1; }
+.padbars svg .gl { fill: var(--real); } .padbars svg .sm { fill: var(--sim); }
+.arms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.arms div { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); min-width: 0; }
+.arms b { font: 600 15px/1.25 var(--f-display); display: flex; align-items: center; gap: 7px; }
+.arms b::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.arms small { font-size: 13.5px; line-height: 1.4; color: var(--muted); }
+@media (max-width: 760px) { .arms { grid-template-columns: minmax(0, 1fr); } }
+.tz { position: relative; width: 100%; aspect-ratio: 1180 / 520; }
+.tz canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tz .msg { position: absolute; inset: 0; display: grid; place-items: center; font: 500 13px/1.4 var(--f-mono); color: var(--muted); pointer-events: none; }
+@media (max-width: 720px) { .tz { aspect-ratio: 600 / 1150; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <a class="brand" href="#top">TouchTwin <i>Real2Sim2Real</i></a>
+    <nav class="steps-nav" aria-label="Sections">
+      <a href="#assets"><span>1</span>Assets</a>
+      <a href="#video2sim"><span>2</span>Real2Sim</a>
+      <a href="#sim2video"><span>3</span>Sim2Real</a>
+      <a href="#applications"><span>4</span>Perturbations</a>
+      <a href="#policy"><span>5</span>Contact &amp; grip</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap">
+    <section class="hero" aria-labelledby="title">
+      <h1 id="title">TouchTwin</h1>
+      <p class="dek">Scaling Human Touch Data via <span class="real">Real</span>-to-<span class="sim">Sim</span>-to-<span class="real">Real</span></p>
+      <div class="authors">
+        <p class="names">Huiwen Han<sup>1,2*</sup>, Nuo Chen<sup>2*</sup>, Ziyao Zeng<sup>3*</sup>, Dayou Li<sup>2</sup>, Hao Wang<sup>2</sup>, Amir Hossein Rahmati<sup>2</sup>, Xiaoning Qian<sup>2</sup>, Bangya Liu<sup>4</sup>, Zhiwen Fan<sup>2</sup></p>
+        <p class="affil"><sup>1</sup>Stanford University · <sup>2</sup>Texas A&amp;M University · <sup>3</sup>Yale University · <sup>4</sup>2077AI · <sup>*</sup>Equal contribution</p>
+      </div>
+      <div class="byline"><span class="links"><a href="paper/TouchTwin.pdf" target="_blank" rel="noopener">Abstract (PDF)</a></span><span class="key" aria-label="Colour key"><span style="--c: var(--real)">real</span><span style="--c: var(--sim)">simulated</span><span style="--c: var(--gen)">generated</span></span></div>
+    </section>
+
+    <figure class="teaser">
+      <div class="tz" id="tz"><canvas id="tz-canvas" role="img" aria-label="Pipeline. A real tactile-glove recording; its physics replay in MuJoCo, seen through the same head camera, with real and simulated taxel maps and grip force that match (r = 0.93); the replay as a data engine: simulated variants, and eight of them rendered by a video world model into realistic video, train a hand policy: trained on touch-grounded replays it succeeds on 20 of 20 held-out recordings at 0.99 times the recorded grip, against 17 of 20 at 0.31 times when it imitates the observed hand pose."></canvas><div class="msg" id="tz-msg" hidden>Loading…</div></div>
+    </figure>
+
+    <section class="abstract" aria-labelledby="abs">
+      <h2 class="label" id="abs">Overview</h2>
+      <div class="tri">
+        <div class="card">
+          <span class="tag">The gap</span>
+          <h3>Vision-based replays lack contact force</h3>
+          <ul>
+            <li>A hand pose shows where each finger stops, not how far it closes, and contacts are often hidden.</li>
+            <li>In our experiments:
+              <ul>
+                <li>Vision gets grip wrong both ways: <b>0.31×</b> the recorded force from pose imitation, <b>1.55×</b> from vision-based replays.</li>
+                <li>Physics alone does not recover it: the recorded grip is <b>1.6–3.7×</b> the least force that holds the mug.</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag">TouchTwin</span>
+          <h3>Rebuild each recording in MuJoCo, with touch driving the interaction</h3>
+          <ul>
+            <li>Coding agents write the objects as physics-tested programs.</li>
+            <li>A per-subject hand carries the glove's 880 taxels.</li>
+            <li>The recorded touch closes each finger past the visible pose: where, when and how hard it presses.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag">What touch fixes</span>
+          <h3>Human-level grip, fewer missed contacts, more touch data</h3>
+          <ul>
+            <li>Hand policy grips at <b>0.99×</b> the recorded force: <b>20/20</b> held-out recordings, <b>35/36</b> perturbed tests.</li>
+            <li>Missed real contact frames drop from 32% to <b>13%</b>.</li>
+            <li>Touch data scales without new capture:
+              <ul>
+                <li>Each replay seeds perturbed demos (other grasps, motion, grip, object) with physics-resolved force labels.</li>
+                <li>A simulation-conditioned video model renders them as realistic video in new views and scenes.</li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <details class="full"><summary>Full abstract</summary><p class="prose">Human demonstrations are becoming the main source of data for dexterous manipulation, and real-to-sim-to-real pipelines multiply each demonstration in simulation. These pipelines rebuild the interaction from vision, which recovers how the hand moves. Which fingers touch, when, and how hard remain unobserved, because a hand pose shows where each finger stops on the surface rather than how far it is driven to close. This gap is a force gap: a hand policy that imitates the observed pose grips held-out objects with 0.31× the recorded force, and a policy trained on physics replays of vision-tracked poses grips with 1.55×. TouchTwin closes the gap with measured human touch. Each selected TouchScale recording, captured with head and wrist RGB-D cameras and an 880-taxel glove, is rebuilt in MuJoCo. Coding agents write the objects as physics-tested programs, and a per-subject tactile hand replays the interaction with the recorded touch setting the contact and the closing force of each finger. In simulation, a policy trained on touch-grounded replays grips at 0.99× the recorded force and succeeds in 20/20 trials on held-out recordings and 35/36 unseen perturbations; a contact predictor trained on them misses 13% of real contact frames, against 32% for vision-based replays. Each replay also seeds perturbed demonstrations with simulated contact and force labels, rendered as realistic video in new views and scenes.</p></details>
+    </section>
+
+    <ol class="pipeline" aria-label="Pipeline">
+      <li><a href="#assets"><span class="n">1</span><span class="flow">Real → Sim</span><span class="t">Physics-tested objects, tactile hands</span></a></li>
+      <li><a href="#video2sim"><span class="n">2</span><span class="flow">Real → Sim</span><span class="t">Touch-driven physics replay</span></a></li>
+      <li><a href="#sim2video"><span class="n">3</span><span class="flow">Sim → Real</span><span class="t">Simulation-conditioned video</span></a></li>
+      <li><a href="#applications"><span class="n">4</span><span class="flow">Sim → Sim</span><span class="t">Perturbations</span></a></li>
+      <li><a href="#policy"><span class="n">5</span><span class="flow">Sim → Real</span><span class="t">Contact prediction, hand policy</span></a></li>
+    </ol>
+
+    <section class="step" id="assets" aria-labelledby="h-assets">
+      <div class="step-head"><span class="num">1</span><h2 id="h-assets">Physics-tested objects and tactile hands</h2></div>
+      <p class="lede">Coding agents write each object as a physics-tested MuJoCo program; per-subject hands carry the glove's 880 taxels.</p>
+
+      <div class="sub" id="hand-block">
+        <h3>Tactile hands</h3>
+        <ol class="hp" aria-label="How the hand model is built">
+          <li><span class="ph"><img src="img/hand_step1.jpg" alt="Real tactile glove grasping a mug" loading="lazy"></span><b><span>1</span>Record</b></li>
+          <li><span class="ph"><img src="img/hand_step2.png" alt="Fitted hand, three-quarter view" loading="lazy"></span><b><span>2</span>Fit</b></li>
+          <li><span class="ph"><img src="img/hand_step3.png" alt="The hand's joint chain: bones between the joints and a dot on each hinge, over a faint outline of the hand" loading="lazy"></span><b><span>3</span>Rig</b></li>
+          <li><span class="ph"><img src="img/hand_step4.png" alt="Fingertip pad with its taxels" loading="lazy"></span><b><span>4</span>Taxels</b></li>
+          <li><span class="ph"><img src="img/hand_step5.jpg" alt="Real glove force map with 880 cells" loading="lazy"></span><b><span>5</span>Check</b></li>
+        </ol>
+        <div class="taxspec" aria-label="Taxels per finger">
+          <div style="--c: rgb(226 92 70)"><b>Thumb</b><strong>296</strong><small>distal 16×10 · middle 4×8 · thenar 13×8</small></div>
+          <div style="--c: rgb(240 160 50)"><b>Index</b><strong>128</strong><small>distal 9×8 · middle 3×8 · proximal 4×8</small></div>
+          <div style="--c: rgb(90 170 90)"><b>Middle</b><strong>128</strong><small>distal 9×8 · middle 3×8 · proximal 4×8</small></div>
+          <div style="--c: rgb(70 140 210)"><b>Ring</b><strong>128</strong><small>distal 9×8 · middle 3×8 · proximal 4×8</small></div>
+          <div style="--c: rgb(150 100 200)"><b>Little</b><strong>96</strong><small>distal 9×8 · middle 3×8</small></div>
+          <div style="--c: rgb(230 210 80)"><b>Palm</b><strong>104</strong><small>hypothenar 13×8</small></div>
+        </div>
+        <p class="minor"><b>880 taxels on 15 pads</b> (rows × columns as on the glove), one per 1.5 mm glove cell.</p>
+      </div>
+
+      <h3>Objects</h3>
+      <div class="ogrid" id="ogrid">
+        <canvas id="ogrid-canvas" aria-hidden="true"></canvas>
+          <figure class="otile" data-key="mug__white_ceramic"><div class="ov" style="background-image: url(3d/mug__white_ceramic.webp)" role="img" aria-label="White ceramic mug, interactive 3D"></div><figcaption><b>White ceramic mug</b><span>rigid</span></figcaption></figure>
+          <figure class="otile" data-key="flask__glass_medium"><div class="ov" style="background-image: url(3d/flask__glass_medium.webp)" role="img" aria-label="Glass flask, interactive 3D"></div><figcaption><b>Glass flask</b><span>rigid, transparent</span></figcaption></figure>
+          <figure class="otile" data-key="spray_bottle__white_green_trigger"><div class="ov" style="background-image: url(3d/spray_bottle__white_green_trigger.webp)" role="img" aria-label="Spray bottle, interactive 3D"></div><figcaption><b>Spray bottle</b><span>trigger, nozzle</span></figcaption></figure>
+          <figure class="otile" data-key="first_aid_box__light_blue"><div class="ov" style="background-image: url(3d/first_aid_box__light_blue.webp)" role="img" aria-label="First-aid box, interactive 3D"></div><figcaption><b>First-aid box</b><span>latch, lid, handle, tray</span></figcaption></figure>
+          <figure class="otile" data-key="toolbox__orange_large"><div class="ov" style="background-image: url(3d/toolbox__orange_large.webp)" role="img" aria-label="Orange toolbox, interactive 3D"></div><figcaption><b>Orange toolbox</b><span>lid, latch, handle, 2 covers</span></figcaption></figure>
+          <figure class="otile" data-key="headphones__white_over_ear"><div class="ov" style="background-image: url(3d/headphones__white_over_ear.webp)" role="img" aria-label="Headphones, interactive 3D"></div><figcaption><b>Headphones</b><span>fold hinges, sliders</span></figcaption></figure>
+          <figure class="otile" data-key="scale__white_round"><div class="ov" style="background-image: url(3d/scale__white_round.webp)" role="img" aria-label="Kitchen scale, interactive 3D"></div><figcaption><b>Kitchen scale</b><span>buttons, battery cover</span></figcaption></figure>
+          <figure class="otile" data-key="parts_box__white_v2_hinge180"><div class="ov" style="background-image: url(3d/parts_box__white_v2_hinge180.webp)" role="img" aria-label="Clear parts box, interactive 3D"></div><figcaption><b>Clear parts box</b><span>2 latches, lid</span></figcaption></figure>
+          <figure class="otile" data-key="basket__white_deep"><div class="ov" style="background-image: url(3d/basket__white_deep.webp)" role="img" aria-label="Storage basket, interactive 3D"></div><figcaption><b>Storage basket</b><span>rigid</span></figcaption></figure>
+          <figure class="otile" data-key="mug__blue_steel"><div class="ov" style="background-image: url(3d/mug__blue_steel.webp)" role="img" aria-label="Steel mug with lid, interactive 3D"></div><figcaption><b>Steel mug</b><span>sliding drink-lid</span></figcaption></figure>
+          <figure class="otile" data-key="wok__steel_wood_handle"><div class="ov" style="background-image: url(3d/wok__steel_wood_handle.webp)" role="img" aria-label="Wok, interactive 3D"></div><figcaption><b>Wok</b><span>rigid</span></figcaption></figure>
+          <figure class="otile" data-key="pipette__grey_1ml"><div class="ov" style="background-image: url(3d/pipette__grey_1ml.webp)" role="img" aria-label="1 mL pipette, interactive 3D"></div><figcaption><b>1 mL pipette</b><span>plunger, tip ejector</span></figcaption></figure>
+      </div>
+      <p class="minor">Drag an object to turn it. Joints open and close as in the simulator, latches before lids.</p>
+    </section>
+
+    <section class="step" id="video2sim" aria-labelledby="h-v2s">
+      <div class="step-head"><span class="num">2</span><h2 id="h-v2s"><span class="real">Real</span><span class="two">2</span><span class="sim">Sim</span></h2></div>
+      <p class="lede">The recorded touch sets where, when and how hard each finger presses; checks and a review agent compare the replay with the recording.</p>
+
+      <div class="replay" id="replay">
+        <div class="ctrl-row">
+          <div class="seg" role="tablist" aria-label="Choose a replay">
+            <button type="button" role="tab" data-clip="mug" aria-selected="true">One hand · mug</button>
+            <button type="button" role="tab" data-clip="firstaid" aria-selected="false">Two hands · first-aid box</button>
+            <button type="button" role="tab" data-clip="cylinder" aria-selected="false">Two hands · cylinder</button>
+            <button type="button" role="tab" data-clip="laptop" aria-selected="false">Two hands · laptop</button>
+          </div>
+        </div>
+        <div class="handdemo">
+          <div class="vid" style="--ar: 16 / 9"><video id="replay-video" data-src="media/replay_mug.mp4" poster="media/replay_mug.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Replay video: real head camera, simulation through the head camera, 3D view and finger forces"></video></div>
+          <div class="touchcol" id="touchcol" aria-label="Touch on the open hands, palms up: real glove above, simulation below">
+            <canvas id="hand-canvas" aria-hidden="true"></canvas>
+            <div class="tstage" id="ts-real"><span class="tlab real">Real glove</span></div>
+            <div class="tstage" id="ts-sim"><span class="tlab sim">Simulation</span></div>
+            <div class="msg" id="hand-msg">3D hands load when they scroll into view</div>
+          </div>
+        </div>
+        <div class="ctrl-row">
+          <span class="lab">Show</span>
+          <div class="seg" id="hand-mode" role="group" aria-label="Taxel colours"><button type="button" data-v="touch" aria-pressed="true">Touch</button><button type="button" data-v="pads" aria-pressed="false">Pads</button></div>
+          <span class="minor">Palms up, as the wearer sees them; the taxels follow the video. Drag to turn the hands.</span>
+        </div>
+        <div class="handread">
+          <div class="chips" id="hand-read" aria-live="off"></div>
+          <div class="cbar" id="hand-cbar" aria-hidden="true"><i></i><span id="hand-cbar-lab"><em>0</em><em>1</em><em>2 N per taxel</em></span></div>
+        </div>
+        <div class="replay-grid">
+          <div class="sub">
+            <div class="stage" id="replay-stage">
+              <canvas id="replay-canvas" aria-label="Interactive 3D replay"></canvas>
+              <div class="msg" id="replay-msg">3D replay loads when it scrolls into view</div>
+              <div class="hint">3D replay, synced to the video · drag to orbit</div>
+            </div>
+            <div class="timeline">
+              <button type="button" class="btn" id="replay-play">Pause</button>
+              <input type="range" id="replay-time" min="0" max="1000" value="0" step="1" aria-label="Replay time">
+              <output id="replay-t">t = 0.00 s</output>
+            </div>
+          </div>
+          <div class="replay-low">
+            <div class="clipinfo" id="clipinfo" aria-live="polite"></div>
+            <div class="padbars" id="padbars" aria-label="Force per glove pad, real glove vs simulation, at the current moment"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step" id="sim2video" aria-labelledby="h-s2v">
+      <div class="step-head"><span class="num">3</span><h2 id="h-s2v"><span class="sim">Sim</span><span class="two">2</span><span class="real">Real</span></h2></div>
+      <p class="lede">Simulation makes generated video follow the physics: conditioned on the simulated hand and object, Wan2.2 comes closest to the real video.</p>
+
+      <figure>
+        <div class="vid" style="--ar: 2590 / 370"><video data-src="media/sim2real_row.mp4" poster="media/sim2real_row.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Four in a row: the simulated control given to the world model, our generated video, the real video, and generation without the simulation"></video></div>
+        <figcaption>Same first frame, prompt and seed. Lines trace the mug; green = real.</figcaption>
+      </figure>
+
+      <div class="tbl narrow" role="region" aria-label="Video generation metrics" tabindex="0">
+        <table>
+          <thead>
+            <tr><th>Video generation</th><th>PSNR ↑</th><th>SSIM ↑</th><th>LPIPS ↓</th><th>DINO ↑</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Sim render only</td><td>7.79</td><td>0.309</td><td>0.757</td><td>0.537</td></tr>
+            <tr><td>First frame + text (baseline)</td><td>15.36</td><td>0.663</td><td>0.489</td><td>0.854</td></tr>
+            <tr><td>Baseline + depth control</td><td>18.55</td><td>0.759</td><td>0.276</td><td>0.914</td></tr>
+            <tr class="ours"><td>Baseline + sim control (ours)</td><td class="best">18.89</td><td class="best">0.766</td><td class="best">0.258</td><td class="best">0.928</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tblnote">Generated vs. real video (same first frame, prompt and seed).</p>
+
+    </section>
+
+    <section class="step" id="applications" aria-labelledby="h-app">
+      <div class="step-head"><span class="num">4</span><h2 id="h-app">Perturbations</h2></div>
+      <p class="lede">Each replay seeds perturbed demonstrations (other grasps, motion, grip and object) with physics-resolved force labels.</p>
+
+      <div class="sub">
+      <h3><span class="lbl">(a)</span>Other grasps and perturbations</h3>
+      <figure>
+        <div class="vid" style="--ar: 2084 / 1452"><video data-src="media/applications.mp4" poster="media/applications.jpg" data-src-dark="media/applications_dark.mp4" data-poster-dark="media/applications_dark.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Other hand postures with live touch maps, and simulated perturbations"></video></div>
+        <figcaption>Top: other postures with live touch maps. Bottom: faster, weaker, heavier, slippery, shaken.</figcaption>
+      </figure>
+      </div>
+
+      <div class="sub">
+      <h3><span class="lbl">(b)</span>Perturbed until the mug drops</h3>
+      <div class="demos four">
+        <figure class="demo">
+          <div class="vid" style="--ar: 16 / 9"><video data-src="media/sim_drop_grip.mp4" poster="media/sim_drop_grip.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Simulated grip fading until the mug drops"></video></div>
+          <figcaption><b>Grip fades</b> until the mug drops</figcaption>
+        </figure>
+        <figure class="demo">
+          <div class="vid" style="--ar: 16 / 9"><video data-src="media/sim_drop_friction.mp4" poster="media/sim_drop_friction.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Simulated hand getting slippery until the mug drops"></video></div>
+          <figcaption><b>Hand gets slippery</b></figcaption>
+        </figure>
+        <figure class="demo">
+          <div class="vid" style="--ar: 16 / 9"><video data-src="media/sim_drop_mass.mp4" poster="media/sim_drop_mass.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Simulated mug getting heavier until it drops"></video></div>
+          <figcaption><b>Mug gets heavier</b></figcaption>
+        </figure>
+        <figure class="demo">
+          <div class="vid" style="--ar: 16 / 9"><video data-src="media/sim_drop_shake.mp4" poster="media/sim_drop_shake.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Simulated shake building up until the mug is thrown out"></video></div>
+          <figcaption><b>Shake builds up</b></figcaption>
+        </figure>
+      </div>
+      </div>
+
+      <div class="sub">
+      <h3><span class="lbl">(c)</span>Touch beyond the glove</h3>
+      <figure>
+        <div class="vid" style="--ar: 1934 / 756"><video data-src="media/palm_press3.mp4" poster="media/palm_press3.jpg" muted loop playsinline controls preload="none" data-auto aria-label="Recorded replay (left) and a simulated palm press (right), each with a small palm-side view and the normal force on the object below it"></video></div>
+        <figcaption>Pressing the palm onto the mug: the simulator records contact where the glove has no sensors.</figcaption>
+      </figure>
+      </div>
+
+    </section>
+
+    <section class="step" id="policy" aria-labelledby="h-pol">
+      <div class="step-head"><span class="num">5</span><h2 id="h-pol">Touch closes the force gap</h2></div>
+      <p class="lede">Models trained on touch-grounded replays, tested on held-out recordings.</p>
+
+      <div class="sub">
+        <h3>Contact prediction</h3>
+        <p>A contact predictor trained on vision-based simulations misses 32% of the real contact frames on held-out recordings; training on touch-grounded simulations reduces the miss rate to 13%.</p>
+        <div class="tbl narrow" role="region" aria-label="Contact prediction results" tabindex="0">
+          <table>
+            <thead>
+              <tr><th>Contact prediction, trained on</th><th>F1 ↑</th><th>Missed contact ↓</th><th>Press dur. err. ↓</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Vision-based replays</td><td>0.778</td><td>32.2%</td><td>1.01 s</td></tr>
+              <tr class="ours"><td>Touch-grounded replays (ours)</td><td class="best">0.890</td><td class="best">13.1%</td><td class="best">0.61 s</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tblnote">Contact prediction on held-out human-ego recordings. Press dur. err.: |predicted − true| press time per finger.</p>
+      </div>
+
+      <div class="sub">
+        <h3>Hand policy</h3>
+        <p>A hand policy (N0-VTLA) trained on the observed finger pose grips held-out objects with 0.31× the true force; the touch-grounded replays restore human-level grip (0.99×, 20/20).</p>
+        <div class="arms" aria-label="Three policies that differ only in their finger labels">
+          <div style="--c: #e89660"><b>Observed finger pose</b><small>the joint angles the hand reached</small></div>
+          <div style="--c: var(--muted)"><b>Vision-based replays</b><small>physics replays of vision-tracked poses</small></div>
+          <div style="--c: #b4501a"><b>Touch-grounded replays (ours)</b><small>the recorded touch sets how far each finger closes</small></div>
+        </div>
+
+        <figure>
+          <div class="vid" style="--ar: 2880 / 840"><video data-src="media/policy_trio.mp4" poster="media/policy_trio.jpg" muted loop playsinline controls preload="none" data-auto aria-label="The three policies on the same simulated test: ours holds the mug, the two baselines let it slip out and fall; below each, the simulated touch on the hand"></video></div>
+          <figcaption><b>Simulated test with finger jitter.</b> Trained on touch-grounded replays, the hand holds the mug (in-hand slip 1.0 mm); trained on the observed finger pose or on vision-based replays, the mug slips out and falls (107 and 108 mm). Bottom: simulated touch on each hand.</figcaption>
+        </figure>
+
+        <div class="tbl narrow" role="region" aria-label="Hand policy results" tabindex="0">
+          <table>
+            <thead>
+              <tr><th>Hand policy, trained on</th><th>Held-out recordings ↑</th><th>Grip vs. recording</th><th>Simulated test ↑</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Observed finger pose</td><td>17/20</td><td>0.31</td><td>26/36</td></tr>
+              <tr><td>Vision-based replays</td><td>15/20</td><td>1.55</td><td>33/36</td></tr>
+              <tr class="ours"><td>Touch-grounded replays (ours)</td><td class="best">20/20</td><td class="best">0.99</td><td class="best">35/36</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tblnote">Hand policy on held-out recordings and simulated tests; success: slip ≤ 5 mm, set down ≤ 30 mm off.</p>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>TouchTwin</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const blobs = new Map();
+  const blobURL = src => { if (!blobs.has(src)) blobs.set(src, fetch(src, { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => URL.createObjectURL(b))); return blobs.get(src); };
+  window.__blobURL = blobURL;
+  const isDark = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  const srcOf = v => (isDark() && v.dataset.srcDark) || v.dataset.src;
+  const themePosters = () => $$("video[data-poster-dark]").forEach(v => { v.poster = isDark() ? v.dataset.posterDark : v.dataset.posterLight || (v.dataset.posterLight = v.getAttribute("poster")); });
+  async function load(v) {
+    const src = srcOf(v); if (!src || v.dataset.loaded === src) return;
+    v.dataset.loaded = src;
+    let url; try { url = await blobURL(src); } catch (e) { url = src; }
+    if (v.dataset.loaded !== src) return;
+    v.src = url;
+  }
+  const visible = new Set();
+  const play = v => { if (!reduce && v.hasAttribute("data-auto") && visible.has(v)) v.play().catch(() => {}); };
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    const v = e.target;
+    if (e.isIntersecting) { visible.add(v); load(v).then(() => play(v)); }
+    else { visible.delete(v); if (!v.paused) v.pause(); }
+  }), { rootMargin: "160px 0px" });
+  $$("video[data-src]").forEach(v => io.observe(v));
+  $$("video[data-poster-dark]").forEach(v => { v.dataset.posterLight = v.getAttribute("poster"); }); themePosters();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { themePosters();
+    $$("video[data-src-dark]").forEach(v => { if (v.dataset.loaded && v.dataset.loaded !== srcOf(v)) { v.pause(); load(v).then(() => play(v)); } }); });
+  window.__setVideo = (v, src, poster) => { v.pause(); v.removeAttribute("src"); v.poster = poster; v.dataset.src = src; v.dataset.loaded = ""; v.load(); return load(v).then(() => play(v)); };
+
+  window.__hand = { clip: "mug", load: null };
+
+  const links = new Map($$(".steps-nav a").map(a => [a.getAttribute("href").slice(1), a]));
+  const so = new IntersectionObserver(es => es.forEach(e => { const a = links.get(e.target.id); if (a && e.isIntersecting) { links.forEach(x => x.classList.remove("on")); a.classList.add("on"); } }), { rootMargin: "-45% 0px -50% 0px" });
+  $$(".step").forEach(s => so.observe(s));
+
+})();
+</script>
+
+<script>
+(() => {
+  const root = document.getElementById("tz"), cv = document.getElementById("tz-canvas"), msg = document.getElementById("tz-msg");
+  if (!root || !cv.getContext) return;
+  const ctx = cv.getContext("2d"), reduce = matchMedia("(prefers-reduced-motion: reduce)").matches, narrowQ = matchMedia("(max-width: 720px)");
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const VIDS = { simhc: "media/teaser_simhc_53780879.mp4", rep: "media/teaser_real_53780879.mp4", app: "media/applications.mp4", tgen: "media/teaser_gen.mp4" };
+  const C = {
+    real: ["rep", 0, 0, 640, 360], sim: ["simhc", 0, 0, 640, 360],
+    tiles: [["app", 428, 130, 399, 299], ["app", 842, 130, 399, 299], ["app", 1256, 130, 399, 299], ["app", 1669, 130, 399, 299],
+            ["app", 40, 1049, 347, 260], ["app", 454, 1049, 347, 260], ["app", 868, 1049, 347, 260], ["app", 1282, 1049, 347, 260]],
+    gtiles: [0, 1, 2, 3, 4, 5, 6, 7].map(i => ["tgen", (i % 4) * 416, Math.floor(i / 4) * 240, 416, 240])
+  };
+  const GEN_PENDING = new Set();
+  const PAD0 = { 0: [19, 0], 1: [19, 11], 2: [24, 11], 3: [0, 0], 4: [10, 0], 5: [14, 0], 7: [0, 8], 8: [10, 8], 9: [14, 8], 11: [0, 16], 12: [10, 16], 13: [14, 16], 15: [0, 24], 16: [10, 24], 18: [19, 20] };
+  const L = narrow => narrow ? {
+    W: 600, H: 1150, hd: [[0, 16, "REAL", "real"], [310, 16, "SIM", "sim"], [0, 548, "DATA ENGINE", "gen"]],
+    real: [0, 34, 290, 163], sim: [310, 34, 290, 163], mapR: [0, 222, 4.0], mapS: [310, 222, 4.0], chart: [0, 412, 600, 96],
+    arrows: [[[292, 115], [308, 115]], [[292, 296], [308, 296]]],
+    tiles: [0, 562, 141, 81, 12, 10], down1: [[300, 748], [300, 770]], wmLab: [312, 766, "world model"],
+    gtiles: [0, 778, 141, 81, 12, 10], down2: [[300, 964], [300, 986]], polLab: [312, 982, "hand policy"],
+    metric: [0, 994, 600, 141], fans: [], tag: [600, 548]
+  } : {
+    W: 1180, H: 520, hd: [[0, 16, "REAL RECORDING", "real"], [362, 16, "PHYSICS REPLAY", "sim"], [742, 16, "DATA ENGINE", "gen"]],
+    real: [0, 34, 300, 169], sim: [362, 34, 300, 169], mapR: [0, 226, 4.25], mapS: [362, 226, 4.25], chart: [0, 418, 662, 96],
+    arrows: [[[306, 118], [356, 118]], [[306, 304], [356, 304]]],
+    tiles: [742, 34, 101, 79, 9, 11], down1: [[958, 214], [958, 232]], wmLab: [970, 229, "world model"],
+    gtiles: [742, 240, 101, 58, 9, 9], down2: [[958, 378], [958, 394]], polLab: [970, 391, "hand policy"],
+    metric: [742, 402, 431, 112],
+    fans: [[[668, 118], [742, 73]], [[668, 118], [742, 163]]], tag: [1172, 16]
+  };
+  let lay = L(narrowQ.matches), dpr = 1, scale = 1;
+  const vids = {}, data = { ok: false };
+  function size() {
+    lay = L(narrowQ.matches); const r = root.getBoundingClientRect(); if (!r.width) return;
+    dpr = Math.min(devicePixelRatio || 1, 2); scale = r.width / lay.W;
+    cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.width * lay.H / lay.W * dpr);
+  }
+  new ResizeObserver(size).observe(root); narrowQ.addEventListener("change", size); size();
+  Promise.all([fetch("3d/touch_mug_53780879.json").then(r => r.json()), fetch("3d/glb_taxels.json").then(r => r.json())]).then(([T, G]) => {
+    const h = T.hands.left, dec = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+    const sel = h.pad_names.map((n, i) => [n, i]).filter(([n]) => /^(thumb|index|middle)/.test(n)).map(([, i]) => i);
+    const gF = h.pad_glove.map(r => sel.reduce((a, i) => a + r[i], 0)), sF = h.pad_sim.map(r => sel.reduce((a, i) => a + r[i], 0));
+    const mean = a => a.reduce((x, y) => x + y, 0) / a.length, mg = mean(gF), ms = mean(sF);
+    let sxy = 0, sxx = 0, syy = 0; gF.forEach((g, i) => { sxy += (g - mg) * (sF[i] - ms); sxx += (g - mg) ** 2; syy += (sF[i] - ms) ** 2; });
+    Object.assign(data, { ok: true, n: T.n, fps: T.fps, G: dec(h.glove), S: dec(h.sim), lay: G, gF, sF, fmax: Math.max(...gF, ...sF), r: sxy / Math.sqrt(sxx * syy) });
+  }).catch(() => {});
+  let started = false, onScreen = false;
+  async function start() {
+    if (started) return; started = true;
+    for (const [k, u] of Object.entries(VIDS)) {
+      const v = document.createElement("video"); v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.preload = "auto"; vids[k] = v;
+      (window.__blobURL ? window.__blobURL(u) : Promise.resolve(u)).catch(() => u).then(url => { v.src = url; if (onScreen && !reduce) v.play().catch(() => {}); else v.addEventListener("loadeddata", () => { v.currentTime = Math.min(1.6, (v.duration || 2) / 2); }, { once: true }); });
+    }
+  }
+  new IntersectionObserver(es => { onScreen = es.some(e => e.isIntersecting); if (onScreen) start();
+    Object.values(vids).forEach(v => { if (onScreen && !reduce) v.play().catch(() => {}); else v.pause(); }); }, { rootMargin: "120px 0px" }).observe(root);
+  const hex = c => { const m = c.match(/^#([0-9a-f]{6})$/i); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : [128, 128, 128]; };
+  const mix = (a, b, t) => `rgb(${a.map((x, i) => Math.round(x + (b[i] - x) * t)).join(",")})`;
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); };
+  function vid(src, rect, col, alpha = 1) {
+    const [k, sx, sy, sw, sh] = src, v = vids[k], [x, y, w, h] = rect, a = w / h;
+    let cx = sx, cy = sy, cw = sw, ch = sh; if (cw / ch > a) { cw = ch * a; cx = sx + (sw - cw) / 2; } else { ch = cw / a; cy = sy + (sh - ch) / 2; }
+    ctx.save(); ctx.globalAlpha = alpha; rr(x, y, w, h, 6); ctx.clip();
+    if (v && v.readyState >= 2) ctx.drawImage(v, cx, cy, cw, ch, x, y, w, h); else { ctx.fillStyle = P.studio; ctx.fillRect(x, y, w, h); }
+    ctx.restore(); if (col) { ctx.globalAlpha = alpha; ctx.fillStyle = col; ctx.fillRect(x, y + h + 4, w, 3); ctx.globalAlpha = 1; }
+  }
+  function txt(s, x, y, o = {}) { ctx.font = `${o.w || 500} ${o.s || 12}px ${o.f || "'JetBrains Mono', ui-monospace, monospace"}`; ctx.fillStyle = o.c || P.muted; ctx.textAlign = o.a || "left"; ctx.textBaseline = "alphabetic"; if (o.ls) ctx.letterSpacing = o.ls + "px"; ctx.fillText(s, x, y); ctx.letterSpacing = "0px"; }
+  function arrow(a, b, col, t) {
+    ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(b[0], b[1]);
+    ctx.lineTo(b[0] - 8 * Math.cos(ang - 0.4), b[1] - 8 * Math.sin(ang - 0.4)); ctx.lineTo(b[0] - 8 * Math.cos(ang + 0.4), b[1] - 8 * Math.sin(ang + 0.4)); ctx.fill();
+    flow([a, b], col, t);
+  }
+  function flow(pts, col, t, n = 3) {
+    const P0 = pts[0], P1 = pts[pts.length - 1], curve = pts.length === 2 && Math.abs(P1[1] - P0[1]) > 4 && Math.abs(P1[0] - P0[0]) > 4;
+    const at = u => { if (!curve) return [P0[0] + (P1[0] - P0[0]) * u, P0[1] + (P1[1] - P0[1]) * u];
+      const mx = (P0[0] + P1[0]) / 2, b = (1 - u) ** 3, c = 3 * (1 - u) ** 2 * u, d = 3 * (1 - u) * u * u, e = u ** 3;
+      return [b * P0[0] + c * mx + d * mx + e * P1[0], b * P0[1] + c * P0[1] + d * P1[1] + e * P1[1]]; };
+    ctx.fillStyle = col;
+    for (let i = 0; i < n; i++) { const u = reduce ? (i + 0.5) / n : ((t / 1400) + i / n) % 1, p = at(u); ctx.globalAlpha = Math.sin(Math.PI * u); ctx.beginPath(); ctx.arc(p[0], p[1], 2.6, 0, 7); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  }
+  function curve(a, b, col) { const mx = (a[0] + b[0]) / 2; ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.bezierCurveTo(mx, a[1], mx, b[1], b[0], b[1]); ctx.stroke(); }
+  const mixA = (a, b, t) => a.map((x, i) => x + (b[i] - x) * t), rgb = a => `rgb(${a.map(Math.round).join(",")})`;
+  function taxmap(x, y, cell, arr, k, base) {
+    const b = hex(base), light = mixA(b, [255, 255, 255], 0.72), dark = mixA(b, [0, 0, 0], 0.5);
+    for (let i = 0; i < 880; i++) {
+      const [pad, row, col] = data.lay[i], o = PAD0[pad]; if (!o) continue;
+      const q = arr[k * 880 + i], v = Math.min(1, q / 200);
+      ctx.fillStyle = q > 6 ? rgb(v < 0.5 ? mixA(light, b, v / 0.5) : mixA(b, dark, (v - 0.5) / 0.5)) : P.cell;
+      ctx.fillRect(x + (o[1] + col) * cell, y + (o[0] + row) * cell, cell * 0.82, cell * 0.82);
+    }
+  }
+  let P = {}, born = 0;
+  function palette() { P = { ink: css("--ink"), muted: css("--muted"), line: css("--line"), real: css("--real"), sim: css("--sim"), studio: css("--studio") || "#f6f6f4",
+    gen: matchMedia("(prefers-color-scheme: dark)").matches && document.documentElement.dataset.theme !== "light" ? "#8f9cf0" : "#3d4a8f", cell: css("--line") }; }
+  palette(); matchMedia("(prefers-color-scheme: dark)").addEventListener("change", palette);
+  function draw(now) {
+    requestAnimationFrame(draw);
+    if (!onScreen && started) return;
+    if (!born && started) born = now;
+    const Lr = lay; ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0); ctx.clearRect(0, 0, Lr.W, Lr.H);
+    const rep = vids.rep, shc = vids.simhc;
+    if (rep && shc && rep.readyState >= 2 && shc.readyState >= 2 && Math.abs(shc.currentTime - rep.currentTime) > 0.08) shc.currentTime = rep.currentTime;
+    const k = data.ok ? Math.max(0, Math.min(data.n - 1, Math.round(((rep && rep.readyState >= 2) ? rep.currentTime : (now / 1000) % 5) * data.fps))) : 0;
+    for (const [x, y, s, c] of Lr.hd) txt(s, x, y, { c: P[c], w: 600, s: 12.5, ls: 1.2 });
+    vid(C.real, Lr.real, P.real); vid(C.sim, Lr.sim, P.sim);
+    if (data.ok) {
+      const [mx, my, c] = Lr.mapR, [nx, ny] = Lr.mapS;
+      taxmap(mx, my, c, data.G, k, P.real); taxmap(nx, ny, c, data.S, k, P.sim);
+      const tx = mx + 32 * c + 14, sx = nx + 32 * c + 14, ty = my + 36;
+      txt("glove", tx, ty, { c: P.real, w: 600 }); txt(`${data.gF[k].toFixed(1)} N`, tx, ty + 30, { c: P.ink, s: 24, w: 600, f: "'Familjen Grotesk', sans-serif" });
+      txt("sim", sx, ty, { c: P.sim, w: 600 }); txt(`${data.sF[k].toFixed(1)} N`, sx, ty + 30, { c: P.ink, s: 24, w: 600, f: "'Familjen Grotesk', sans-serif" });
+      txt("880 taxels", tx, ty + 56, { s: 11 }); txt("880 taxels", sx, ty + 56, { s: 11 });
+      const [cx0, cy0, cw, chh] = Lr.chart, X = i => cx0 + i / (data.n - 1) * cw, Y = f => cy0 + chh - 6 - f / data.fmax * (chh - 30);
+      ctx.strokeStyle = P.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx0, cy0 + chh - 6); ctx.lineTo(cx0 + cw, cy0 + chh - 6); ctx.stroke();
+      const line = (A, col, w, upto, al) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.globalAlpha = al; ctx.beginPath(); for (let i = 0; i <= upto; i++) i ? ctx.lineTo(X(i), Y(A[i])) : ctx.moveTo(X(i), Y(A[i])); ctx.stroke(); ctx.globalAlpha = 1; };
+      line(data.gF, P.real, 3.2, data.n - 1, 0.18); line(data.sF, P.sim, 1.6, data.n - 1, 0.25);
+      line(data.gF, P.real, 3.2, k, 0.9); line(data.sF, P.sim, 1.7, k, 1);
+      ctx.fillStyle = P.real; ctx.beginPath(); ctx.arc(X(k), Y(data.gF[k]), 4, 0, 7); ctx.fill(); ctx.fillStyle = P.sim; ctx.beginPath(); ctx.arc(X(k), Y(data.sF[k]), 3, 0, 7); ctx.fill();
+      txt("grip force", cx0, cy0 + 10, { c: P.muted, w: 600 }); txt(`r = ${data.r.toFixed(2)}`, cx0 + cw, cy0 + 10, { c: P.ink, w: 600, a: "right" });
+    }
+    for (const [a, b] of Lr.arrows) arrow(a, b, P.muted, now);
+    const [gx, gy, tw, th, gapx, gapy] = Lr.tiles, hi = reduce ? -1 : Math.floor(now / 650) % C.tiles.length;
+    C.tiles.forEach((src, i) => {
+      const x = gx + (i % 4) * (tw + gapx), y = gy + Math.floor(i / 4) * (th + gapy), age = (now - born) / 1000 - 0.25 - i * 0.12;
+      const a = reduce || !born ? 1 : Math.max(0, Math.min(1, age * 3)), s = 0.9 + 0.1 * a;
+      ctx.save(); ctx.translate(x + tw / 2, y + th / 2); ctx.scale(s, s); ctx.translate(-x - tw / 2, -y - th / 2);
+      vid(src, [x, y, tw, th], P.sim, a);
+      if (i === hi) { ctx.strokeStyle = P.sim; ctx.lineWidth = 2; rr(x - 1, y - 1, tw + 2, th + 2, 7); ctx.stroke(); }
+      ctx.restore();
+    });
+    for (const [a, b] of Lr.fans) { curve(a, b, P.muted); flow([a, b], P.sim, now); }
+    arrow(Lr.down1[0], Lr.down1[1], P.muted, now); txt(Lr.wmLab[2], Lr.wmLab[0], Lr.wmLab[1], { c: P.gen, w: 600 });
+    const [qx, qy, qw, qh, qgx, qgy] = Lr.gtiles;
+    C.gtiles.forEach((src, i) => {
+      const x = qx + (i % 4) * (qw + qgx), y = qy + Math.floor(i / 4) * (qh + qgy), age = (now - born) / 1000 - 0.9 - i * 0.12;
+      const a = reduce || !born ? 1 : Math.max(0, Math.min(1, age * 3));
+      if (!GEN_PENDING.has(i)) { vid(src, [x, y, qw, qh], P.gen, a); return; }
+      ctx.save(); ctx.globalAlpha = a; rr(x + 0.5, y + 0.5, qw - 1, qh - 1, 6); ctx.fillStyle = P.studio; ctx.fill();
+      ctx.setLineDash([4, 3]); ctx.strokeStyle = P.gen; ctx.lineWidth = 1.2; ctx.stroke(); ctx.setLineDash([]);
+      txt("generating" + (reduce ? "…" : ".".repeat(1 + Math.floor(now / 450) % 3)), x + qw / 2 - 40, y + qh / 2 + 4, { c: P.gen, s: 10.5 });
+      ctx.fillStyle = P.gen; ctx.fillRect(x, y + qh + 4, qw, 3); ctx.restore();
+    });
+    arrow(Lr.down2[0], Lr.down2[1], P.muted, now); txt(Lr.polLab[2], Lr.polLab[0], Lr.polLab[1], { c: P.sim, w: 600 });
+    const [mx0, my0, mw, mh] = Lr.metric, grow = reduce || !born ? 1 : Math.min(1, Math.max(0, ((now - born) / 1000 - 1.2) / 1.2)), ease = 1 - (1 - grow) ** 3;
+    const bars = [["observed pose", 17 / 20, P.muted], ["touch-grounded", 20 / 20, P.sim]], lo = 0.5, hiV = 1.0, frac = v => `${Math.round(v * 20)} / 20`;
+    txt("held-out success", mx0, my0 + 12, { c: P.muted, w: 600 });
+    bars.forEach(([lab, v, col], i) => { const y = my0 + 26 + i * 52, w = Math.max(2, (mw - 64) * (v - lo) / (hiV - lo) * ease);
+      txt(lab, mx0, y + 12, { c: P.ink, s: 12.5 }); ctx.fillStyle = col; rr(mx0, y + 19, w, 16, 3); ctx.fill();
+      txt(frac(v), mx0 + w + 8, y + 32, { c: P.ink, w: 600, s: 12.5 }); });
+    if (msg) msg.hidden = !!(rep && rep.readyState >= 2) || !started;
+  }
+  requestAnimationFrame(draw);
+})();
+</script>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
+
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const whenVisible = (el, fn) => { const o = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { o.disconnect(); fn(); } }, { rootMargin: "200px 0px" }); o.observe(el); };
+function makeRenderer(canvas) {
+  try { const r = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); r.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); return r; }
+  catch (e) { return null; }
+}
+function sizeTo(r, cam, canvas) { const b = canvas.getBoundingClientRect(); if (!b.width) return; r.setSize(b.width, b.height, false); cam.aspect = b.width / b.height; cam.updateProjectionMatrix(); }
+
+const INFERNO = ["#000004", "#1b0c41", "#4a0c6b", "#781c6d", "#a52c60", "#cf4446", "#ed6925", "#fb9b06", "#fcffa4"];
+const FINGER_COL = { thumb: "#e25c46", index: "#f0a032", middle: "#5aaa5a", ring: "#468cd2", little: "#9664c8", palm: "#e6d250" };
+const HCLIPS = {
+  mug: { video: "media/replay_mug", touch: "3d/touch_mug.json", hands: ["left"] },
+  firstaid: { video: "media/replay_firstaid", touch: "3d/touch_firstaid.json", hands: ["left", "right"] },
+  laptop: { video: "media/replay_laptop", touch: "3d/touch_laptop.json", hands: ["left", "right"] },
+  cylinder: { video: "media/replay_cylinder", touch: "3d/touch_cylinder.json", hands: ["left", "right"] }
+};
+whenVisible($("#touchcol"), async () => {
+  const col = $("#touchcol"), canvas = $("#hand-canvas"), msg = $("#hand-msg"), video = $("#replay-video"), read = $("#hand-read"), cbar = $("#hand-cbar"), cbarLab = $("#hand-cbar-lab");
+  const stages = { glove: $("#ts-real"), sim: $("#ts-sim") };
+  const renderer = makeRenderer(canvas);
+  if (!renderer) { msg.textContent = "3D needs WebGL, which this browser has turned off"; return; }
+  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.setClearColor(0x000000, 0);
+  const env = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  const cam = new THREE.PerspectiveCamera(24, 2, 0.01, 20), controls = new OrbitControls(cam, col);
+  controls.enableDamping = true; controls.enablePan = false; controls.enableZoom = false; col.style.touchAction = "pan-y";
+  const resize = () => { const r = col.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); const s = stages.glove.getBoundingClientRect(); if (s.height) { cam.aspect = s.width / s.height; cam.updateProjectionMatrix(); if (C) frame(); } };
+  let C = null;
+  new ResizeObserver(resize).observe(col);
+  let onScreen = true; new IntersectionObserver(es => { onScreen = es.some(e => e.isIntersecting); }).observe(col);
+  let PAD = [];
+  try { PAD = await (await fetch("3d/hand_pads.json")).json(); } catch (e) {}
+  const padCol = PAD.map(n => new THREE.Color(FINGER_COL[Object.keys(FINGER_COL).find(f => n.startsWith(f)) || "palm"]));
+  const dec = s => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+  const N = 880;
+  const LUT = Array.from({ length: 256 }, (_, i) => { const u = Math.pow(i / 255, 0.6) * (INFERNO.length - 1), a = Math.floor(Math.min(u, INFERNO.length - 2)), f = u - a;
+    const c0 = new THREE.Color(INFERNO[INFERNO.length - 1 - a]), c1 = new THREE.Color(INFERNO[INFERNO.length - 2 - a]); return c0.lerp(c1, f); });
+  const IDLE = new THREE.Color("#a08d80");
+  let skin, centres;
+  try {
+    const txt = await (await fetch("3d/hand_left.glb.txt")).text(); const b = atob(txt.trim()), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    const gltf = await new GLTFLoader().parseAsync(u.buffer, ""), byName = {};
+    gltf.scene.updateMatrixWorld(true); gltf.scene.traverse(o => { if (o.isMesh) byName[o.name] = o; });
+    skin = byName.geometry_0.geometry.clone().applyMatrix4(byName.geometry_0.matrixWorld); skin.deleteAttribute("normal"); skin.computeVertexNormals();
+    centres = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { const m = byName["geometry_" + (i + 1)]; m.geometry.computeBoundingBox(); const c = m.geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(m.matrixWorld); centres.set([c.x, c.y, c.z], 3 * i); }
+  } catch (e) { console.error(e); msg.textContent = "Could not load the hand"; return; }
+  skin.computeBoundingBox(); const hb = skin.boundingBox, hc = hb.getCenter(new THREE.Vector3()), hs = hb.getSize(new THREE.Vector3());
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xdcb8a0, roughness: 0.85, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.6 });
+  const dot = new THREE.SphereGeometry(0.00105, 10, 8), GAP = 0.012;
+  function buildPanel(sides) {
+    const scene = new THREE.Scene(); scene.environment = env; scene.add(new THREE.HemisphereLight(0xffffff, 0xc9c4bb, 0.45));
+    const key = new THREE.DirectionalLight(0xffffff, 0.9); scene.add(key);
+    const inst = {};
+    sides.forEach(side => {
+      const g = new THREE.Group(); g.add(new THREE.Mesh(skin, skinMat));
+      const im = new THREE.InstancedMesh(dot, new THREE.MeshBasicMaterial(), N); im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3); im.frustumCulled = false;
+      g.add(im); inst[side] = im;
+      g.position.set(-hc.x, -hc.y, -hc.z);
+      if (side === "right") { g.scale.x = -1; g.position.x = hc.x; }
+      if (sides.length > 1) g.position.x += (side === "left" ? -1 : 1) * (hs.x + GAP) / 2;
+      scene.add(g);
+    });
+    return { scene, key, inst };
+  }
+  const M = new THREE.Matrix4(), P3 = new THREE.Vector3(), Q = new THREE.Quaternion(), S3 = new THREE.Vector3();
+  let mode = "touch";
+  function paint(k) {
+    const sides = HCLIPS[C.key].hands, T = C.T;
+    for (const side of sides) for (const src of ["glove", "sim"]) {
+      const im = C.P[src].inst[side], A = C.F[side][src];
+      for (let i = 0; i < N; i++) {
+        let sc = 0.8, c = IDLE;
+        if (mode === "pads") { sc = 1.05; c = padCol[i] || IDLE; }
+        else { const q = A[k * N + i]; if (q > 6) { sc = 1.35 + 2.4 * q / 255; c = LUT[q]; } }
+        P3.fromArray(centres, 3 * i); S3.setScalar(sc); M.compose(P3, Q, S3); im.setMatrixAt(i, M); im.setColorAt(i, c);
+      }
+      im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true;
+    }
+    const chip = (a, b) => `<span class="chip"><small>${a}</small><b>${b}</b></span>`;
+    let html = mode === "pads" ? chip("taxels", "880 per hand") + chip("pads", "15") + chip("colour", "one per finger") : chip("t", `${(T.t0 + k / T.fps).toFixed(2)} s`);
+    if (mode !== "pads") for (const side of sides) { const h = T.hands[side], tag = sides.length > 1 ? (side === "left" ? "L " : "R ") : "", rel = h.unit.glove !== "N";
+      html += chip(`${tag}real glove`, rel ? `${h.glove_N[k].toFixed(1)} rel.` : `${h.glove_N[k].toFixed(1)} N`) + chip(`${tag}simulation`, `${h.sim_N[k].toFixed(1)} N`); }
+    read.innerHTML = html; cbar.hidden = mode === "pads";
+    cbarLab.innerHTML = T.hands[sides[0]].unit.glove !== "N" ? "<em>0</em><em>real glove: relative (units undocumented); sim: 0–2 N</em><em>max</em>" : "<em>0</em><em>0.5</em><em>1</em><em>2 N per taxel</em>";
+  }
+  const VIEW = new THREE.Vector3(0, -0.2, 1).normalize();
+  function frame() {
+    const n = HCLIPS[C.key].hands.length, w = n * hs.x + (n - 1) * GAP, h = hs.y, t = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const d = 1.06 * Math.max(h / 2 / t, w / 2 / (t * cam.aspect)) + hs.z;
+    controls.target.set(0, 0, 0); cam.up.set(0, 1, 0); cam.position.copy(VIEW).multiplyScalar(d); cam.near = d / 50; cam.far = d * 10; cam.updateProjectionMatrix(); controls.update();
+  }
+  const cache = {};
+  async function loadClip(key) {
+    const H = HCLIPS[key]; msg.hidden = false; msg.textContent = "Loading touch…"; C = null;
+    if (video.dataset.src !== H.video + ".mp4") window.__setVideo(video, H.video + ".mp4", H.video + ".jpg");
+    try {
+      const T = await (cache[H.touch] || (cache[H.touch] = fetch(H.touch).then(r => r.json())));
+      if (window.__hand.clip !== key) return;
+      const F = {}; for (const s_ of H.hands) F[s_] = { glove: dec(T.hands[s_].glove), sim: dec(T.hands[s_].sim) };
+      C = { key, T, F, P: { glove: buildPanel(H.hands), sim: buildPanel(H.hands) }, lastK: -1, lastMode: "" };
+      frame(); msg.hidden = true;
+    } catch (e) { console.error(e); msg.textContent = "Could not load this clip's touch"; }
+  }
+  $$("#hand-mode button").forEach(b => b.addEventListener("click", () => { $$("#hand-mode button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); mode = b.dataset.v; if (C) C.lastK = -1; }));
+  const clock = performance.now();
+  (function loop(now) {
+    requestAnimationFrame(loop); if (!onScreen || !C) return;
+    const T = C.T; let k;
+    if (video.readyState >= 2 && isFinite(video.duration)) k = Math.round(video.currentTime * T.fps);
+    else k = reduce ? Math.floor(T.n / 2) : Math.floor((now - clock) / 1000 * T.fps) % T.n;
+    k = Math.max(0, Math.min(T.n - 1, k));
+    if (k !== C.lastK || mode !== C.lastMode) { paint(k); C.lastK = k; C.lastMode = mode; }
+    controls.update();
+    for (const src of ["glove", "sim"]) C.P[src].key.position.copy(cam.position);
+    const cr = col.getBoundingClientRect();
+    renderer.setScissorTest(false); renderer.clear(); renderer.setScissorTest(true);
+    for (const src of ["glove", "sim"]) {
+      const r = stages[src].getBoundingClientRect(), x = r.left - cr.left, y = cr.height - (r.top - cr.top) - r.height;
+      renderer.setViewport(x, y, r.width, r.height); renderer.setScissor(x, y, r.width, r.height); renderer.render(C.P[src].scene, cam);
+    }
+  })(performance.now());
+  resize();
+  window.__hand.load = loadClip; loadClip(window.__hand.clip);
+});
+
+const FIT = { pipette__grey_1ml: 1.3, mug__white_ceramic: 2.3, parts_box__white_v2_hinge180: 2.5 };
+const REST = { first_aid_box__light_blue: { lid: -94.83, latch: 167.84 } };
+const OPEN = { first_aid_box__light_blue: { lid: 0, latch: 0 } };
+function setJoint(j, v) { j.value = v; if (j.type === "hinge") j.pivot.quaternion.setFromAxisAngle(j.axis, THREE.MathUtils.degToRad(v)); else j.pivot.position.copy(j.anchor).addScaledVector(j.axis, v); }
+function assemble(gltf, parts, rest, open) {
+  const root = new THREE.Group(), joints = [], by = Object.fromEntries(parts.map(p => [p.name, p])), names = parts.map(p => p.name).sort((a, b) => b.length - a.length), inner = {};
+  const build = name => { if (inner[name]) return inner[name]; const p = by[name]; const up = (p && p.parent && by[p.parent]) ? build(p.parent) : root;
+    if (p && p.joint) { const a = new THREE.Vector3(...p.joint.anchor), ax = new THREE.Vector3(...p.joint.axis).normalize(); const pivot = new THREE.Group(); pivot.position.copy(a);
+      const g = new THREE.Group(); g.position.copy(a).multiplyScalar(-1); pivot.add(g); up.add(pivot);
+      const lim = p.joint.limit || p.joint.range, r = rest?.[name] ?? Math.min(Math.max(0, lim[0]), lim[1]);
+      const far = Math.abs(lim[1] - r) >= Math.abs(lim[0] - r) ? lim[1] : lim[0];
+      joints.push({ name, type: p.joint.type, pivot, anchor: a, axis: ax, lo: lim[0], hi: lim[1], rest: r, open: open?.[name] ?? far, liftOut: !!p.joint.lift_out }); return inner[name] = g; }
+    return inner[name] = up; };
+  parts.forEach(p => build(p.name));
+  gltf.scene.traverse(o => { if (!o.isMesh) return; const ms = Array.isArray(o.material) ? o.material : [o.material];
+    o.geometry = toCreasedNormals(o.geometry, Math.PI / 6);
+    ms.forEach(m => { m.metalness = 0; m.roughness = Math.max(m.roughness ?? 0.6, 0.45); m.envMapIntensity = 0.9; m.side = THREE.DoubleSide; });
+    o.castShadow = !ms.some(m => m.transparent); });
+  [...gltf.scene.children].forEach(n => { const nm = n.name || ""; const part = names.find(p => nm === p || (nm.startsWith(p + "_") && /^\d+$/.test(nm.slice(p.length + 1)))); (part ? inner[part] : root).add(n); });
+  const rank = j => /latch/.test(j.name) ? 0 : j.liftOut ? 2 : 1;
+  joints.sort((a, b) => rank(a) - rank(b));
+  return { root, joints };
+}
+const ease = x => 0.5 - 0.5 * Math.cos(Math.PI * Math.min(1, Math.max(0, x)));
+function cycle(T, now) {
+  const J = T.joints, n = J.length; if (!n) return;
+  const P = 2200, lag = 420, hold = 1200, gap = 1600, L = 2 * (n - 1) * lag + P + hold + gap, k = ((now - T.t0) % L + L) % L, shut = (n - 1) * lag + P / 2 + hold;
+  J.forEach((j, i) => { const f = ease((k - i * lag) / (P / 2)) * (1 - ease((k - shut - (n - 1 - i) * lag) / (P / 2))); setJoint(j, j.rest + (j.open - j.rest) * f); });
+}
+whenVisible($("#ogrid"), async () => {
+  const grid = $("#ogrid"), canvas = $("#ogrid-canvas");
+  const renderer = makeRenderer(canvas); if (!renderer) return;
+  renderer.toneMapping = THREE.NoToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.setClearColor(0x000000, 0);
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const env = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  let objects = []; try { objects = await (await fetch("3d/objects.json")).json(); } catch (e) { return; }
+  const info = Object.fromEntries(objects.map(o => [o.key, o]));
+  const resize = () => { const r = grid.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); };
+  new ResizeObserver(resize).observe(grid); resize();
+  let onScreen = true; new IntersectionObserver(es => { onScreen = es.some(e => e.isIntersecting); }).observe(grid);
+  const tiles = $$("#ogrid .otile").map((el, i) => ({ el, ov: el.querySelector(".ov"), key: el.dataset.key, i, scene: null }));
+  async function load(T) {
+    const o = info[T.key]; if (!o) return;
+    const txt = await (await fetch(`3d/${T.key}.glb.txt`)).text(); const b = atob(txt.trim()), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i);
+    const gltf = await new GLTFLoader().parseAsync(u.buffer, "");
+    const scene = new THREE.Scene(); scene.environment = env; scene.add(new THREE.HemisphereLight(0xffffff, 0xd9d6cf, 0.35));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.25); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024); sun.shadow.radius = 5; sun.shadow.bias = -0.0004; scene.add(sun, sun.target);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.16 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+    const { root, joints } = assemble(gltf, o.parts_tree || [], REST[T.key], OPEN[T.key]); scene.add(root);
+    root.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(root);
+    joints.forEach(j => setJoint(j, j.rest)); root.updateMatrixWorld(true); box.union(new THREE.Box3().setFromObject(root));
+    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3()).length();
+    const cam = new THREE.PerspectiveCamera(30, 1, size / 200, size * 30);
+    cam.position.copy(c).add(new THREE.Vector3(0.6, 0.5, 1).normalize().multiplyScalar(size * (FIT[T.key] || 1.35 * (o.fit || 1.6))));
+    const controls = new OrbitControls(cam, T.ov); controls.target.copy(c); controls.enableZoom = false; controls.enablePan = false; controls.enableDamping = true;
+    controls.autoRotate = !reduce; controls.autoRotateSpeed = 1.2; controls.update(); T.ov.style.touchAction = "pan-y";
+    let resume = 0; controls.addEventListener("start", () => { controls.autoRotate = false; clearTimeout(resume); });
+    controls.addEventListener("end", () => { resume = setTimeout(() => { controls.autoRotate = !reduce; }, 4000); });
+    const L = size * 1.2; sun.position.copy(c).add(new THREE.Vector3(0.45, 1.6, 0.8).normalize().multiplyScalar(L * 2)); sun.target.position.copy(c);
+    Object.assign(sun.shadow.camera, { left: -L, right: L, top: L, bottom: -L, near: L * 0.2, far: L * 5 }); sun.shadow.camera.updateProjectionMatrix();
+    ground.position.set(c.x, box.min.y - size * 0.002, c.z); ground.scale.setScalar(size * 6);
+    Object.assign(T, { scene, cam, controls, joints, t0: performance.now() + T.i * 650 });
+    T.ov.style.backgroundImage = "radial-gradient(115% 95% at 50% 38%, var(--studio) 52%, var(--studio-edge))";
+  }
+  (async () => { for (const T of tiles) { try { await load(T); } catch (e) { console.error(T.key, e); } } })();
+  (function loop(now) {
+    requestAnimationFrame(loop); if (!onScreen) return;
+    const g = grid.getBoundingClientRect();
+    renderer.setScissorTest(false); renderer.clear(); renderer.setScissorTest(true);
+    for (const T of tiles) {
+      if (!T.scene) continue;
+      const r = T.ov.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) continue;
+      if (!reduce) cycle(T, now); T.controls.update();
+      const x = r.left - g.left, y = g.height - (r.top - g.top) - r.height;
+      renderer.setViewport(x, y, r.width, r.height); renderer.setScissor(x, y, r.width, r.height); renderer.render(T.scene, T.cam);
+    }
+  })(0);
+});
+
+const chips = (what, items, open) => `<p class="what">${what}</p><div class="chips">${items.map(([k, v, ok]) => `<span class="chip${ok ? " ok" : ""}"><small>${k}</small><b>${v}</b></span>`).join("")}</div>${open ? `<p class="open">${open}</p>` : ""}`;
+const CLIPS = {
+  mug: { video: "media/replay_mug", json: "3d/replay_mug.json", dir: [0.9, -0.55, 0.75], zoom: 1.0,
+    html: chips("The left hand moves a mug to the marked spot. Finger force, simulation vs glove:", [["force r, thumb", "0.94"], ["index", "0.94"], ["middle", "0.85"], ["clip", "edf79415 · 5 s"]],
+      "The grip follows the glove's finger forces, so this agreement is partly by design; which taxels touch comes from the simulation.") },
+  firstaid: { video: "media/replay_firstaid", json: "3d/replay_firstaid.json", dir: [-0.35, 1.25, 0.9], zoom: 0.62,
+    html: chips("Both hands pinch the handle, lift, carry and set the box down.", [["task outcome", "7 / 7", 1], ["load left / right", "50 / 50 %"], ["gloves left / right", "69 / 31 %"], ["set-down error", "1.8 cm"], ["penetration p95", "1.3 mm"]],
+      "Still open: 12-13 mm slip in both hands; 65 of 94 checks pass.") },
+  cylinder: { video: "media/replay_cylinder", json: "3d/replay_cylinder.json", dir: [-0.3, 1.25, 1.0], zoom: 0.68,
+    html: chips("The right hand lifts a cylinder out of a tray and stands it on the mat; the left holds the tray.", [["task outcome", "7 / 7", 1], ["right hand carries", "76 %"], ["peak lift sim / real", "11.7 / 11.7 cm"], ["set-down error", "1.1 cm"], ["tray moves", "3.0 mm"]],
+      "Still open: 23 mm slip in the right hand, and its index closes on nothing; 34 of 44 checks pass.") },
+  laptop: { video: "media/replay_laptop", json: "3d/replay_laptop.json", dir: [0.3, -1.25, 1.1], zoom: 0.75,
+    html: chips("Both hands take the closed laptop's lid by its front corners and open it to about 97°, then let go.", [["task outcome", "5 / 5", 1], ["lid angle sim / real", "96.5 / 97°"], ["hinge angle RMS", "5.1°"], ["base moves", "2.2 mm"], ["penetration p95", "0.0 mm"]],
+      "Still open: the lid slides in both hands (33 / 64 mm); 40 of 49 checks pass. The EMF glove's units are undocumented, so its bars are relative.") }
+};
+whenVisible($("#replay"), () => {
+  const canvas = $("#replay-canvas"), msg = $("#replay-msg"), video = $("#replay-video"), slider = $("#replay-time"), out = $("#replay-t"), playBtn = $("#replay-play");
+  let clip = "mug";
+  const showInfo = () => { $("#clipinfo").innerHTML = CLIPS[clip].html; };
+  showInfo();
+  const renderer = makeRenderer(canvas);
+  const cam = new THREE.PerspectiveCamera(34, 4 / 3, 0.002, 50); cam.up.set(0, 0, 1);
+  const controls = renderer ? new OrbitControls(cam, canvas) : null;
+  if (!renderer) msg.textContent = "3D needs WebGL, which this browser has turned off";
+  else { new ResizeObserver(() => sizeTo(renderer, cam, canvas)).observe(canvas); sizeTo(renderer, cam, canvas); }
+  const data = {}; let scene = null, F = null, groups = [], dyn = [], t0 = 0, t1 = 1, tNow = 0, frameIdx = -1, ownClock = null, onScreen = true;
+  new IntersectionObserver(es => { onScreen = es.some(e => e.isIntersecting); }).observe(canvas);
+  function build(D) {
+    scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f94, 1.7));
+    const key = new THREE.DirectionalLight(0xffffff, 1.5); key.position.set(0.6, -0.8, 1.4); scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.55); fill.position.set(-1, 0.6, 0.5); scene.add(fill);
+    groups = D.bodies.map(() => { const g = new THREE.Group(); scene.add(g); return g; });
+    const gc = {};
+    const meshGeo = n => { if (gc[n]) return gc[n]; const m = D.meshes[n], g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(m.v, 3)); g.setIndex(m.f); g.computeVertexNormals(); return gc[n] = g; };
+    for (const e of D.geoms) {
+      let geo; const s = e.s;
+      if (e.t === "mesh") geo = meshGeo(e.m);
+      else if (e.t === "box") geo = new THREE.BoxGeometry(2 * s[0], 2 * s[1], 2 * s[2]);
+      else if (e.t === "sphere") geo = new THREE.SphereGeometry(s[0], 18, 12);
+      else if (e.t === "ellipsoid") { geo = new THREE.SphereGeometry(1, 18, 12); geo.scale(s[0], s[1], s[2]); }
+      else if (e.t === "cylinder") { geo = new THREE.CylinderGeometry(s[0], s[0], 2 * s[1], 28); geo.rotateX(Math.PI / 2); }
+      else if (e.t === "capsule") { geo = new THREE.CapsuleGeometry(s[0], 2 * s[1], 6, 14); geo.rotateX(Math.PI / 2); }
+      else if (e.t === "plane") geo = new THREE.PlaneGeometry(2 * (s[0] || 0.6), 2 * (s[1] || 0.6));
+      else continue;
+      const a = e.c[3];
+      const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(e.c[0], e.c[1], e.c[2]), roughness: 0.7, metalness: 0.04, transparent: a < 0.98, opacity: Math.max(a, 0.18), side: THREE.DoubleSide, depthWrite: a >= 0.98 });
+      const mesh = new THREE.Mesh(geo, mat); mesh.position.set(e.p[0], e.p[1], e.p[2]); mesh.quaternion.set(e.q[1], e.q[2], e.q[3], e.q[0]); groups[e.b].add(mesh);
+    }
+    const setPose = (i, p, q, k) => { groups[i].position.set(p[3 * k], p[3 * k + 1], p[3 * k + 2]); groups[i].quaternion.set(q[4 * k + 1], q[4 * k + 2], q[4 * k + 3], q[4 * k]); };
+    D.bodies.forEach((_, i) => setPose(i, D.p0, D.q0, i));
+    F = D.frames; dyn = D.dyn; t0 = F[0].t; t1 = F[F.length - 1].t; frameIdx = -1;
+    scene.userData.setPose = setPose;
+    const box3 = new THREE.Box3();
+    F.forEach((f, i) => { if (i % 3) return; dyn.forEach((_, j) => box3.expandByPoint(new THREE.Vector3(f.p[3 * j], f.p[3 * j + 1], f.p[3 * j + 2]))); });
+    box3.expandByScalar(0.05);
+    const c = box3.getCenter(new THREE.Vector3()), r = Math.max(box3.getSize(new THREE.Vector3()).length() / 2, 0.08), C = CLIPS[clip];
+    const dist = r / Math.sin(THREE.MathUtils.degToRad(cam.fov / 2)) * (C.zoom || 1);
+    cam.position.copy(c).addScaledVector(new THREE.Vector3(...C.dir).normalize(), dist); cam.near = dist / 400; cam.far = dist * 40; cam.updateProjectionMatrix();
+    controls.target.copy(c); controls.update();
+  }
+  function setTime(t) {
+    tNow = Math.min(Math.max(t, t0), t1);
+    slider.value = Math.round((tNow - t0) / (t1 - t0) * 1000); out.textContent = `t = ${tNow.toFixed(2)} s`;
+    if (!F) return; let i = F.findIndex(f => f.t >= tNow - 1e-6); if (i < 0) i = F.length - 1; if (i === frameIdx) return; frameIdx = i;
+    const f = F[i]; dyn.forEach((b, j) => scene.userData.setPose(b, f.p, f.q, j));
+  }
+  async function loadClip(k) {
+    clip = k; showInfo(); F = null; scene = null; loadBars(k);
+    if (!renderer) return;
+    msg.hidden = false; msg.textContent = "Loading 3D replay…";
+    try { const D = data[k] || (data[k] = await (await fetch(CLIPS[k].json)).json()); if (clip !== k) return; build(D); setTime(t0); msg.hidden = true; }
+    catch (e) { console.error(e); msg.textContent = "Could not load the 3D replay"; }
+  }
+  const videoReady = () => video.readyState >= 2 && isFinite(video.duration);
+  playBtn.addEventListener("click", () => {
+    if (videoReady()) { if (video.paused) video.play().catch(() => {}); else video.pause(); }
+    else ownClock = ownClock ? null : { wall: performance.now(), t: tNow };
+  });
+  const syncBtn = () => { playBtn.textContent = (videoReady() ? !video.paused : !!ownClock) ? "Pause" : "Play"; };
+  video.addEventListener("play", syncBtn); video.addEventListener("pause", syncBtn);
+  slider.addEventListener("input", () => {
+    const t = t0 + (+slider.value / 1000) * (t1 - t0);
+    if (videoReady()) { video.pause(); video.currentTime = Math.min(t - t0, video.duration - 0.01); }
+    ownClock = null; setTime(t); syncBtn();
+  });
+  $$('#replay [role="tab"]').forEach(b => b.addEventListener("click", () => {
+    $$('#replay [role="tab"]').forEach(x => x.setAttribute("aria-selected", x === b ? "true" : "false"));
+    const k = b.dataset.clip; window.__setVideo(video, CLIPS[k].video + ".mp4", CLIPS[k].video + ".jpg"); loadClip(k);
+    window.__hand.clip = k; if (window.__hand.load) window.__hand.load(k);
+  }));
+  const TOUCH = { mug: "3d/touch_mug.json", firstaid: "3d/touch_firstaid.json", cylinder: "3d/touch_cylinder.json", laptop: "3d/touch_laptop.json" };
+  const SHORT = n => ({ thumb_base_thenar: "thenar", palm_hypothenar: "hypoth." }[n] || n.replace("_distal", " d").replace("_middle", " m").replace("_proximal", " p"));
+  const tcache = {}; let TB = null, TBclip = "", bars = [], lastBk = -1;
+  async function loadBars(k) {
+    const box = $("#padbars"); box.innerHTML = ""; TB = null; bars = []; lastBk = -1; if (!TOUCH[k]) return;
+    let D; try { D = tcache[k] || (tcache[k] = await (await fetch(TOUCH[k])).json()); } catch (e) { return; }
+    if (clip !== k) return;
+    const sides = Object.keys(D.hands), NS = "http://www.w3.org/2000/svg", relAny = sides.some(s_ => D.hands[s_].unit && D.hands[s_].unit.glove !== "N");
+    box.innerHTML = `<div class="ph"><span>force per glove pad ${relAny ? "(relative)" : "(N)"}</span><span><i style="--c: var(--real)">real glove</i><i style="--c: var(--sim)">simulation</i></span></div>`;
+    const row = document.createElement("div"); row.className = "pbrow" + (sides.length > 1 ? " two" : ""); box.appendChild(row);
+    for (const side of sides) {
+      const h = D.hands[side], rel = h.unit && h.unit.glove !== "N";
+      const gmax = Math.max(1e-6, ...h.pad_glove.flat()), smax = Math.max(1e-6, ...h.pad_sim.flat()), gs = rel ? 1 / gmax : 1, ss = rel ? 1 / smax : 1;
+      const peak = h.pad_names.map((_, i) => Math.max(...h.pad_glove.map(r => r[i] * gs), ...h.pad_sim.map(r => r[i] * ss)));
+      const keep = h.pad_names.map((n, i) => i).filter(i => peak[i] >= (rel ? 0.08 : 0.5)).slice(0, 9);
+      const xmax = rel ? 1 : Math.max(5, Math.ceil(Math.max(...keep.map(i => peak[i])) / 5) * 5);
+      const Wd = sides.length > 1 ? 200 : 300, LBL = 58, RH = 14, T = sides.length > 1 ? 15 : 2, Ht = T + keep.length * RH + 13, BW = Wd - LBL - 6;
+      const X = v => BW * Math.min(Math.max(v, 0), xmax) / xmax;
+      const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", `0 0 ${Wd} ${Ht}`); svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", `${side} hand: force per glove pad, real glove vs simulation`);
+      const el = (tag, at, txt) => { const e = document.createElementNS(NS, tag); for (const k_ in at) e.setAttribute(k_, at[k_]); if (txt !== undefined) e.textContent = txt; svg.appendChild(e); return e; };
+      if (sides.length > 1) el("text", { x: 0, y: 10, class: "hd" }, side === "left" ? "left hand" : "right hand");
+      keep.forEach((i, j) => {
+        const y = T + j * RH;
+        el("text", { x: LBL - 6, y: y + 9.5, "text-anchor": "end" }, SHORT(h.pad_names[i]));
+        el("rect", { class: "tr", x: LBL, y: y + 1, width: BW, height: 11, rx: 2 });
+        const g = el("rect", { class: "gl", x: LBL, y: y + 1.5, width: 0, height: 4.6, rx: 1 }), sm = el("rect", { class: "sm", x: LBL, y: y + 6.9, width: 0, height: 4.6, rx: 1 });
+        bars.push({ side, i, g, sm, X, gs, ss });
+      });
+      const yb = T + keep.length * RH + 10;
+      el("text", { x: LBL, y: yb }, "0"); el("text", { x: LBL + BW, y: yb, "text-anchor": "end" }, rel ? "peak" : `${xmax} N`);
+      row.appendChild(svg);
+    }
+    TB = D; TBclip = k;
+  }
+  function drawBars(k) {
+    if (!TB || k === lastBk) return; lastBk = k;
+    for (const b of bars) { const h = TB.hands[b.side];
+      b.g.setAttribute("width", b.X(h.pad_glove[k][b.i] * b.gs)); b.sm.setAttribute("width", b.X(h.pad_sim[k][b.i] * b.ss)); }
+  }
+  (function loop(now) {
+    requestAnimationFrame(loop);
+    if (TB && TBclip === clip) { const vk = videoReady() ? video.currentTime : tNow - t0; drawBars(Math.max(0, Math.min(TB.n - 1, Math.round(vk * TB.fps)))); }
+    if (!renderer || !scene || !onScreen) return;
+    if (videoReady()) setTime(t0 + video.currentTime);
+    else if (ownClock) { let t = ownClock.t + (now - ownClock.wall) / 1000; if (t > t1) { ownClock = { wall: now, t: t0 }; t = t0; } setTime(t); }
+    controls.update(); renderer.render(scene, cam);
+  })(0);
+  syncBtn();
+  loadClip("mug");
+});
+</script>
+</body>
+</html>

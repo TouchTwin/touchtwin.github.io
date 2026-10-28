@@ -324,6 +324,7 @@ h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px
 .tz .msg { position: absolute; inset: 0; display: grid; place-items: center; font: 500 13px/1.4 var(--f-mono); color: var(--muted); pointer-events: none; }
 @media (max-width: 720px) { .tz { aspect-ratio: 600 / 1150; } }
 @media (min-width: 721px) { .teaser { width: 100%; max-width: calc((100svh - 318px) * 1180 / 520); } }
+.promo { margin-top: 36px; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }
 </style>
 <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
@@ -367,6 +368,11 @@ h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px
 
     <figure class="teaser">
       <div class="tz" id="tz"><canvas id="tz-canvas" role="img" aria-label="Pipeline. A real tactile-glove recording; its physics replay in MuJoCo, seen through the same head camera, with real and simulated taxel maps and grip force that match (r = 0.93); the replay as a data engine: simulated variants, and eight of them rendered by a video world model into realistic video, train a hand policy: trained on touch-grounded replays it succeeds on 20 of 20 held-out recordings at 0.99 times the recorded grip, against 17 of 20 at 0.31 times when it imitates the observed hand pose."></canvas><div class="msg" id="tz-msg" hidden>Loading…</div></div>
+    </figure>
+
+    <figure class="promo">
+      <div class="vid" style="--ar: 16 / 9"><video id="promo-video" data-src="media/promo.mp4" poster="media/promo.jpg" muted playsinline controls preload="none" aria-label="TouchTwin overview film, 59 seconds: a real tactile-glove recording, its touch-driven physics replay, the perturbed replays and generated videos of the data engine, and the hand-policy result"></video></div>
+      <figcaption><b>Overview film</b> · 59 s, no sound</figcaption>
     </figure>
 
     <section class="abstract" aria-labelledby="abs">

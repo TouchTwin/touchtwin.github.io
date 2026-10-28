@@ -659,13 +659,15 @@ h3 .lbl { font: 600 0.82em/1 var(--f-mono); color: var(--sim); margin-right: 8px
   const blobs = new Map();
   const blobURL = src => { if (!blobs.has(src)) blobs.set(src, fetch(src, { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => URL.createObjectURL(b))); return blobs.get(src); };
   window.__blobURL = blobURL;
+  const STREAM = /(^|\.)github\.io$/.test(location.hostname) || ["localhost", "127.0.0.1"].includes(location.hostname);
   const isDark = () => document.documentElement.dataset.theme === "dark" || (document.documentElement.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
   const srcOf = v => (isDark() && v.dataset.srcDark) || v.dataset.src;
   const themePosters = () => $$("video[data-poster-dark]").forEach(v => { v.poster = isDark() ? v.dataset.posterDark : v.dataset.posterLight || (v.dataset.posterLight = v.getAttribute("poster")); });
   async function load(v) {
     const src = srcOf(v); if (!src || v.dataset.loaded === src) return;
     v.dataset.loaded = src;
-    let url; try { url = await blobURL(src); } catch (e) { url = src; }
+    let url = src;
+    if (!STREAM) { try { url = await blobURL(src); } catch (e) { url = src; } }
     if (v.dataset.loaded !== src) return;
     v.src = url;
   }
